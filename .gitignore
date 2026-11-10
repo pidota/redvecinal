@@ -1,0 +1,46 @@
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# PHP / Laravel
+backend/vendor/
+backend/node_modules/
+backend/public/hot
+backend/public/storage
+backend/storage/*.key
+backend/storage/pail
+backend/bootstrap/cache/*.php
+!backend/bootstrap/cache/.gitignore
+
+# Build y caché
+backend/.phpunit.cache
+backend/.phpunit.result.cache
+backend/npm-debug.log
+backend/yarn-error.log
+
+# IDE y SO (Windows)
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Flutter (futuro)
+mobile/.dart_tool/
+mobile/.packages
+mobile/.pub-cache/
+mobile/.pub/
+mobile/build/
+mobile/**/ios/Pods/
+mobile/**/android/.gradle/
+mobile/**/android/app/debug/
+mobile/**/android/app/profile/
+mobile/**/android/app/release/
+
+# Logs
+*.log
