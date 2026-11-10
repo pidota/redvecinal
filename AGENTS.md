@@ -21,14 +21,15 @@ Monolito modular Laravel para gestión vecinal municipal. Multi-municipalidad pr
 3. **Multi-municipalidad**: no codificar IDs fijos de municipio en lógica reutilizable; usar `municipality_id` o contexto resoluble cuando aplique.
 4. **Seguridad**: validar entradas; usar Policies y Spatie Permission; no exponer secretos en código versionado.
 5. **Pruebas**: agregar o actualizar tests PHPUnit para nueva funcionalidad con comportamiento verificable.
-6. **Filament**: panel en `/admin`; sin registro público de administradores.
+6. **Filament**: panel en `/admin`; sin registro público; acceso solo con roles definidos en `config/red_vecinal.php` (`canAccessPanel`).
 7. **Despliegue**: no ejecutar deploy, push ni cambios en producción sin autorización del responsable del proyecto.
 8. **Dependencias**: no instalar paquetes innecesarios; respetar Laravel 13 y Filament 5.
 
 ## Fuera de alcance (hasta nueva fase)
 
 - Laravel Reverb, Horizon, Redis en producción, FCM, app Flutter completa.
-- Juntas de vecinos, publicaciones, chat y alertas de emergencia.
+- Publicaciones, chat y alertas de emergencia.
+- Panel comunitario para presidentes/vecinos (solo API parcial en Fase 2).
 
 ## Comandos útiles
 

@@ -19,7 +19,7 @@ DB_USERNAME=root
 DB_PASSWORD=
 ```
 
-## Tablas (Fase 1)
+## Tablas principales
 
 Además de las tablas estándar de Laravel (usuarios, sesiones, caché, jobs):
 
@@ -28,6 +28,10 @@ Además de las tablas estándar de Laravel (usuarios, sesiones, caché, jobs):
 | `personal_access_tokens` | Laravel Sanctum |
 | `permissions`, `roles`, pivots | Spatie Permission |
 | `municipalities` | Dominio Municipality |
+| `municipality_members` | Personal municipal |
+| `neighborhood_groups` | Juntas de vecinos |
+| `group_members` | Integrantes (FK compuesta + índice único presidente) |
+| `group_membership_events` | Auditoría de cambios |
 
 ### `municipalities`
 
@@ -44,7 +48,8 @@ Además de las tablas estándar de Laravel (usuarios, sesiones, caché, jobs):
 
 ## Seeders
 
-- **MunicipalitySeeder**: crea o actualiza Chépica (`updateOrCreate` por `slug`), idempotente.
+- **MunicipalitySeeder**: Chépica (idempotente).
+- **RolesAndPermissionsSeeder**: roles y permisos Fase 2 (idempotente).
 
 ## Comandos seguros
 

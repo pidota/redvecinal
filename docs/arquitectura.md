@@ -31,7 +31,9 @@ app/
 | Canal | Mecanismo |
 |-------|-----------|
 | API móvil / SPA | Laravel Sanctum (tokens) |
-| Panel admin | Sesión web Filament |
+| Panel admin | Sesión web Filament + `FilamentUser::canAccessPanel()` y roles Spatie (`config/red_vecinal.php`) |
+
+Detalle operativo: [acceso-panel-filament.md](acceso-panel-filament.md).
 
 ## Roadmap técnico (post Fase 1)
 
@@ -43,3 +45,12 @@ app/
 ## Municipio inicial
 
 Chépica se registra vía `MunicipalitySeeder` (`slug: chepica`). Otros municipios se agregarán con seeders o procesos de onboarding, sin reescribir el núcleo de la aplicación.
+
+## Dominio Juntas (Fase 2)
+
+- Modelos en `App\Domains\Neighborhoods\`.
+- Reglas de negocio en servicios (`AssignPresidentService`, etc.).
+- Filament para operadores municipales; autorización contextual en Policies.
+- API `/api/v1/groups*` con Sanctum.
+
+Ver [gestion-juntas.md](gestion-juntas.md) y [roles-permisos.md](roles-permisos.md).

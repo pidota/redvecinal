@@ -52,7 +52,10 @@ red-vecinal/
 
 - [Arquitectura](docs/arquitectura.md)
 - [Base de datos](docs/base-de-datos.md)
-- [Instalación local](docs/instalacion-local.md)
+- [Instalación local](docs/instalacion-local.md) (rutas Laragon `D:\laragon\www\red-vecinal`)
+- [Acceso panel Filament](docs/acceso-panel-filament.md)
+- [Gestión de juntas](docs/gestion-juntas.md)
+- [Roles y permisos](docs/roles-permisos.md)
 
 ## Repositorio remoto
 
