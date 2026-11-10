@@ -21,6 +21,16 @@ class RolesAndPermissionsSeeder extends Seeder
         'group-members.update',
         'group-members.suspend',
         'group-presidents.assign',
+        'posts.municipal.view',
+        'posts.municipal.create',
+        'posts.municipal.update',
+        'posts.municipal.hide',
+        'posts.municipal.archive',
+        'posts.community.view',
+        'posts.community.hide',
+        'posts.community.archive',
+        'posts.reports.view',
+        'posts.reports.resolve',
     ];
 
     public const ROLES = [
@@ -55,6 +65,16 @@ class RolesAndPermissionsSeeder extends Seeder
             'group-members.update',
             'group-members.suspend',
             'group-presidents.assign',
+            'posts.municipal.view',
+            'posts.municipal.create',
+            'posts.municipal.update',
+            'posts.municipal.hide',
+            'posts.municipal.archive',
+            'posts.community.view',
+            'posts.community.hide',
+            'posts.community.archive',
+            'posts.reports.view',
+            'posts.reports.resolve',
         ]);
 
         Role::findOrCreate('presidente-junta', 'web');

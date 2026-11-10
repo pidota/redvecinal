@@ -32,6 +32,12 @@ Además de las tablas estándar de Laravel (usuarios, sesiones, caché, jobs):
 | `neighborhood_groups` | Juntas de vecinos |
 | `group_members` | Integrantes (FK compuesta + índice único presidente) |
 | `group_membership_events` | Auditoría de cambios |
+| `post_categories` | Categorías de publicación |
+| `posts` | Publicaciones (estado global) |
+| `post_revisions` | Contenido versionado |
+| `post_attachments` | Adjuntos por revisión |
+| `post_comments`, `post_reactions`, `post_reports` | Interacción |
+| `post_moderation_events` | Auditoría de moderación |
 
 ### `municipalities`
 

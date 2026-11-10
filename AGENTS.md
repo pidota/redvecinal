@@ -28,8 +28,13 @@ Monolito modular Laravel para gestión vecinal municipal. Multi-municipalidad pr
 ## Fuera de alcance (hasta nueva fase)
 
 - Laravel Reverb, Horizon, Redis en producción, FCM, app Flutter completa.
-- Publicaciones, chat y alertas de emergencia.
-- Panel comunitario para presidentes/vecinos (solo API parcial en Fase 2).
+- Chat y alertas de emergencia.
+- Panel comunitario para presidentes/vecinos (moderación vía API Sanctum; Fase 3).
+
+## Fase 3 — Publicaciones
+
+- Dominio `App\Domains\Posts` (revisiones separadas del estado publicado).
+- Documentación: `docs/publicaciones.md`, `docs/moderacion-contenido.md`.
 
 ## Comandos útiles
 

@@ -38,6 +38,14 @@ return [
             'report' => false,
         ],
 
+        'posts_private' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/posts'),
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

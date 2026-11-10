@@ -16,4 +16,21 @@ return [
         'administrador-municipal',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Publicaciones (Fase 3)
+    |--------------------------------------------------------------------------
+    */
+    'posts' => [
+        'max_attachments_per_revision' => 5,
+        'max_attachment_size_kb' => 5120,
+        'allowed_attachment_mimes' => [
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'application/pdf',
+        ],
+        'disk' => env('POSTS_FILESYSTEM_DISK', 'posts_private'),
+    ],
+
 ];

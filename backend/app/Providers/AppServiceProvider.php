@@ -9,6 +9,8 @@ use App\Domains\Neighborhoods\Models\GroupMember;
 use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
 use App\Domains\Neighborhoods\Policies\GroupMemberPolicy;
 use App\Domains\Neighborhoods\Policies\NeighborhoodGroupPolicy;
+use App\Domains\Posts\Models\Post;
+use App\Domains\Posts\Policies\PostPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -30,6 +32,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(NeighborhoodGroup::class, NeighborhoodGroupPolicy::class);
         Gate::policy(GroupMember::class, GroupMemberPolicy::class);
         Gate::policy(MunicipalityMember::class, MunicipalityMemberPolicy::class);
+        Gate::policy(Post::class, PostPolicy::class);
 
         MunicipalityMember::observe(MunicipalityMemberObserver::class);
     }
