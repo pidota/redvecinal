@@ -5,7 +5,7 @@ import 'test_helpers.dart';
 
 void main() {
   testWidgets('publicaciones muestra estado vacío explícito', (tester) async {
-    await openMainShellFromLogin(tester);
+    await openMainShellAuthenticated(tester);
 
     await tester.tap(navBarIcon(Icons.article_outlined));
     await tester.pumpAndSettle();

@@ -1,2 +1,5 @@
-/// Cliente HTTP e interceptores — Fase 5.2 y siguientes.
+/// Cliente HTTP (Dio), errores y coordinación de sesión.
 library;
+
+export 'api_client.dart';
+export 'api_failure.dart';

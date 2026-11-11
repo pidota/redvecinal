@@ -10,7 +10,7 @@ void main() {
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-    await openMainShellFromLogin(tester);
+    await openMainShellAuthenticated(tester);
 
     await tester.tap(navBarIcon(Icons.article_outlined));
     await tester.pumpAndSettle();

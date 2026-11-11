@@ -5,7 +5,7 @@ import 'test_helpers.dart';
 
 void main() {
   testWidgets('navegación inferior cambia entre las cinco secciones', (tester) async {
-    await openMainShellFromLogin(tester);
+    await openMainShellAuthenticated(tester);
 
     expect(find.text('Inicio'), findsWidgets);
     expect(find.text('Bienvenido a Red Vecinal'), findsOneWidget);
