@@ -26,6 +26,21 @@ return [
         'edit_window_minutes' => 15,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Autenticación app móvil (Sanctum, Fase 5.2)
+    |--------------------------------------------------------------------------
+    |
+    | La expiración se aplica solo a tokens creados vía POST /auth/login (expires_at
+    | por token). No modifica config/sanctum.php → expiration (null conserva
+    | smoke tests y tokens emitidos sin expires_at).
+    */
+    'mobile_auth' => [
+        'token_expiration_days' => (int) env('MOBILE_TOKEN_EXPIRATION_DAYS', 90),
+        'login_attempts_per_identity_per_minute' => 5,
+        'login_attempts_per_ip_per_minute' => 30,
+    ],
+
     'posts' => [
         'max_attachments_per_revision' => 5,
         'max_attachment_size_kb' => 5120,

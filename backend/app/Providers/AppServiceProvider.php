@@ -18,8 +18,12 @@ use App\Domains\Chat\Policies\ChatRoomPolicy;
 use App\Domains\Neighborhoods\Observers\NeighborhoodGroupChatObserver;
 use App\Domains\Posts\Models\Post;
 use App\Domains\Posts\Policies\PostPolicy;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -36,6 +40,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('mobile-login', function (Request $request): array {
+            $perIdentity = config('red_vecinal.mobile_auth.login_attempts_per_identity_per_minute', 5);
+            $perIp = config('red_vecinal.mobile_auth.login_attempts_per_ip_per_minute', 30);
+            $email = Str::lower(trim((string) $request->input('email')));
+
+            return [
+                Limit::perMinute($perIdentity)->by('mobile-login|'.$email.'|'.$request->ip()),
+                Limit::perMinute($perIp)->by('mobile-login|ip|'.$request->ip()),
+            ];
+        });
+
         $this->app->booted(function (): void {
             $channels = base_path('routes/channels.php');
             if (file_exists($channels)) {
