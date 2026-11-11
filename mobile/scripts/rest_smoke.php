@@ -67,6 +67,41 @@ $membershipCount = is_array($meJson) && is_array($meJson['municipality_membershi
     : -1;
 $checks[] = ['GET /me', $me['code'] === 200, "http={$me['code']} memberships=$membershipCount"];
 
+$myGroups = request('GET', "$base/me/groups", $token);
+$groupsJson = json_decode($myGroups['body'], true);
+$groupsData = is_array($groupsJson['data'] ?? null) ? $groupsJson['data'] : [];
+$myGroupsOk = $myGroups['code'] === 200
+    && is_array($groupsJson['data'] ?? null)
+    && count($groupsData) >= 1;
+
+if ($myGroupsOk) {
+    $first = $groupsData[0];
+    $requiredKeys = ['id', 'name', 'municipality_id', 'status'];
+    foreach ($requiredKeys as $key) {
+        if (! array_key_exists($key, $first)) {
+            $myGroupsOk = false;
+            break;
+        }
+    }
+    if ($myGroupsOk && (! is_array($first['municipality'] ?? null)
+        || ! isset($first['municipality']['id'], $first['municipality']['name'], $first['municipality']['slug']))) {
+        $myGroupsOk = false;
+    }
+    $sensitive = ['contact_email', 'contact_phone', 'registration_number', 'settings'];
+    foreach ($sensitive as $field) {
+        if (array_key_exists($field, $first) || str_contains($myGroups['body'], "\"$field\"")) {
+            $myGroupsOk = false;
+            break;
+        }
+    }
+}
+
+$checks[] = [
+    'GET /me/groups',
+    $myGroupsOk,
+    'http='.$myGroups['code'].' count='.count($groupsData),
+];
+
 $logout = request('POST', "$base/auth/logout", $token);
 $checks[] = ['POST logout', in_array($logout['code'], [200, 204], true), "http={$logout['code']}"];
 

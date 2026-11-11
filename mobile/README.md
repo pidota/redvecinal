@@ -176,7 +176,8 @@ Ajuste la ruta según su instalación. No se descargan JDK automáticamente desd
 | Subfase | Contenido |
 |---------|-----------|
 | 5.2 | Autenticación Sanctum (completada en app) |
-| 5.3 | Juntas (`/me/groups`, detalle) |
+| 5.3.1 | Mis juntas (`GET /me/groups`) |
+| 5.3.2+ | Explorar, detalle, integrantes |
 | 5.4 | Publicaciones y moderación |
 | 5.5 | Chat + Reverb |
 | 5.6 | Integración, pruebas E2E, estabilización |

@@ -11,8 +11,10 @@ import 'package:red_vecinal/features/auth/data/auth_repository.dart';
 import 'package:red_vecinal/features/auth/domain/auth_state.dart';
 
 import 'features/auth/auth_test_support.dart';
+import 'features/neighborhoods/neighborhood_test_support.dart';
+import 'package:red_vecinal/features/neighborhoods/data/neighborhood_repository.dart';
 
-class _AuthenticatedBootAuthController extends AuthController {
+class AuthenticatedBootAuthController extends AuthController {
   @override
   AuthState build() => AuthAuthenticated(sampleAuthUser());
 
@@ -37,13 +39,19 @@ Future<void> pumpRedVecinalApp(
   );
 }
 
-Future<void> openMainShellAuthenticated(WidgetTester tester) async {
+Future<void> openMainShellAuthenticated(
+  WidgetTester tester, {
+  FakeNeighborhoodGateway? neighborhoodGateway,
+}) async {
   await pumpRedVecinalApp(
     tester,
     overrides: [
       authRepositoryProvider.overrideWithValue(FakeAuthGateway()),
       tokenStorageProvider.overrideWithValue(_InMemoryTokenStorage()),
-      authControllerProvider.overrideWith(_AuthenticatedBootAuthController.new),
+      authControllerProvider.overrideWith(AuthenticatedBootAuthController.new),
+      neighborhoodRepositoryProvider.overrideWithValue(
+        neighborhoodGateway ?? FakeNeighborhoodGateway(),
+      ),
     ],
   );
   await tester.pumpAndSettle();

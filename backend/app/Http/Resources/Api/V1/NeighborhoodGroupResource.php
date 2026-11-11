@@ -17,6 +17,14 @@ class NeighborhoodGroupResource extends JsonResource
             'description' => $this->description,
             'address' => $this->address,
             'status' => $this->status->value ?? $this->status,
+            'municipality' => $this->when(
+                $this->relationLoaded('municipality') && $this->municipality !== null,
+                fn () => [
+                    'id' => $this->municipality->id,
+                    'name' => $this->municipality->name,
+                    'slug' => $this->municipality->slug,
+                ],
+            ),
         ];
     }
 }

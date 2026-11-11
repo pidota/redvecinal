@@ -43,4 +43,6 @@ Ubicados en `App\Domains\Neighborhoods\Services\`. Toda asignación de president
 | `GET /api/v1/groups` | Listado según permisos / membresías |
 | `GET /api/v1/groups/{id}` | Detalle (sin teléfono/correo de contacto en JSON) |
 | `GET /api/v1/me/groups` | Juntas del usuario autenticado |
+
+Detalle del contrato JSON móvil: [mobile-groups-api.md](mobile-groups-api.md). El recurso incluye `municipality: { id, name, slug }` cuando la relación está cargada.
 | `GET /api/v1/groups/{id}/members` | Integrantes activos (datos acotados) |
