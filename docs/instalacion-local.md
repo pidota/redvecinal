@@ -101,6 +101,8 @@ En `.env` local típico: `BROADCAST_CONNECTION=reverb`, `APP_URL=http://red-veci
 
 Producción/VPS: **no** modificar en esta fase; ver `docs/chat-tiempo-real.md`.
 
+Guía paso a paso Reverb + E2E WebSocket: [reverb-desarrollo-local.md](reverb-desarrollo-local.md).
+
 ## Comandos de validación (Fase 1)
 
 ```powershell

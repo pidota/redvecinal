@@ -17,4 +17,16 @@ php prepare-fixture.php fixture.json
 node run.mjs fixture.json
 ```
 
+Suite integral (10 escenarios + revocación, datos ficticios Chépica + municipio B):
+
+```powershell
+node run-all-scenarios.mjs fixture.json
+```
+
+`prepare-fixture.php` crea usuarios `@example.test`, juntas y salas en la **BD local** del `.env`. No ejecutar en producción.
+
+Suspensión manual en validación: `php suspend-member.php <user_id> <group_id>` (usado por `run-all-scenarios.mjs`).
+
+Guía completa: `docs/reverb-desarrollo-local.md`.
+
 Eliminar `fixture.json` tras la prueba (contiene tokens).

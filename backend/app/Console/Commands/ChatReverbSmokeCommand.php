@@ -40,27 +40,23 @@ class ChatReverbSmokeCommand extends Command
         $channel = 'private-chat.room.'.$room->id;
         $socketId = random_int(100000, 999999).'.'.random_int(100000, 999999);
 
-        $auth = Http::withToken($receiverToken)
-            ->acceptJson()
-            ->post(url('/broadcasting/auth'), [
-                'channel_name' => $channel,
-                'socket_id' => $socketId,
-            ]);
+        $auth = $this->httpSanctum('post', '/broadcasting/auth', $receiverToken, [
+            'channel_name' => $channel,
+            'socket_id' => $socketId,
+        ]);
 
         if (! $auth->successful()) {
-            $this->error('Auth canal receptor: HTTP '.$auth->status());
+            $this->error('Auth canal receptor: HTTP '.$auth->status().($auth->body() ? ' — '.mb_substr($auth->body(), 0, 200) : ''));
 
             return self::FAILURE;
         }
         $this->info('OK: receptor autorizado en '.$channel);
 
         $intruder = User::factory()->create();
-        $denied = Http::withToken($intruder->createToken('intruder')->plainTextToken)
-            ->acceptJson()
-            ->post(url('/broadcasting/auth'), [
-                'channel_name' => $channel,
-                'socket_id' => random_int(100000, 999999).'.'.random_int(100000, 999999),
-            ]);
+        $denied = $this->httpSanctum('post', '/broadcasting/auth', $intruder->createToken('intruder')->plainTextToken, [
+            'channel_name' => $channel,
+            'socket_id' => random_int(100000, 999999).'.'.random_int(100000, 999999),
+        ]);
         if ($denied->successful()) {
             $this->error('Fallo: usuario ajeno obtuvo auth de canal');
 
@@ -72,8 +68,7 @@ class ChatReverbSmokeCommand extends Command
         Artisan::call('queue:work', ['--once' => true, '--stop-when-empty' => true]);
         $this->info('OK: mensaje '.$message->id.' persistido (procese cola para emitir WS)');
 
-        $listed = Http::withToken($receiverToken)
-            ->get(url("/api/v1/chat/rooms/{$room->id}/messages"));
+        $listed = $this->httpSanctum('get', "/api/v1/chat/rooms/{$room->id}/messages", $receiverToken);
 
         if (! $listed->successful()) {
             $this->error('GET mensajes falló: '.$listed->status());
@@ -135,5 +130,20 @@ class ChatReverbSmokeCommand extends Command
         }
 
         return false;
+    }
+
+    /**
+     * HTTP contra {@see config('app.url')} — debe usar la misma BD que el comando (tokens Sanctum).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function httpSanctum(string $method, string $path, string $token, array $payload = []): \Illuminate\Http\Client\Response
+    {
+        $base = rtrim((string) config('app.url'), '/');
+        $request = Http::withToken($token)->acceptJson()->baseUrl($base);
+
+        return $method === 'get'
+            ? $request->get($path)
+            : $request->post($path, $payload);
     }
 }
