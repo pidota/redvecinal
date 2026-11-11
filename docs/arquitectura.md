@@ -38,7 +38,7 @@ Detalle operativo: [acceso-panel-filament.md](acceso-panel-filament.md).
 ## Roadmap técnico (post Fase 1)
 
 - Redis + Horizon para colas.
-- Laravel Reverb para tiempo real.
+- Laravel Reverb en producción (backend Fase 4 listo; driver local `log`/`reverb` cuando se instale el paquete).
 - Firebase Cloud Messaging para push.
 - Cliente Flutter en `mobile/`.
 
@@ -54,3 +54,10 @@ Chépica se registra vía `MunicipalitySeeder` (`slug: chepica`). Otros municipi
 - API `/api/v1/groups*` con Sanctum.
 
 Ver [gestion-juntas.md](gestion-juntas.md) y [roles-permisos.md](roles-permisos.md).
+
+## Dominio Chat (Fase 4)
+
+- `App\Domains\Chat\`: salas, mensajes, lecturas, reportes y auditoría.
+- API `/api/v1/chat/*` con Sanctum; Filament solo para reportes municipales.
+- Tiempo real: eventos `ChatRoomSyncBroadcast` (payload mínimo) + lectura de contenido por REST.
+- Canales privados en `routes/channels.php`; ver [chat-tiempo-real.md](chat-tiempo-real.md) y [seguridad-chat.md](seguridad-chat.md).

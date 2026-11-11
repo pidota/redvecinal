@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\V1\ChatMessageController;
+use App\Http\Controllers\Api\V1\ChatRoomController;
 use App\Http\Controllers\Api\V1\NeighborhoodGroupController;
 use App\Http\Controllers\Api\V1\PostAttachmentController;
 use App\Http\Controllers\Api\V1\PostCommentController;
@@ -42,4 +44,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/posts/{post}/reports', [PostReportController::class, 'store']);
     Route::post('/posts/{post}/attachments', [PostAttachmentController::class, 'store']);
     Route::get('/posts/{post}/attachments/{attachment}', [PostAttachmentController::class, 'show']);
+
+    Route::get('/chat/rooms', [ChatRoomController::class, 'index']);
+    Route::get('/chat/rooms/{room}/messages', [ChatRoomController::class, 'messages']);
+    Route::post('/chat/rooms/{room}/messages', [ChatRoomController::class, 'storeMessage']);
+    Route::get('/chat/rooms/{room}/unread-count', [ChatRoomController::class, 'unreadCount']);
+    Route::post('/chat/rooms/{room}/read', [ChatRoomController::class, 'markRead']);
+
+    Route::get('/chat/messages/{message}', [ChatMessageController::class, 'show']);
+    Route::patch('/chat/messages/{message}', [ChatMessageController::class, 'update']);
+    Route::delete('/chat/messages/{message}', [ChatMessageController::class, 'destroy']);
+    Route::post('/chat/messages/{message}/hide', [ChatMessageController::class, 'hide']);
+    Route::post('/chat/messages/{message}/report', [ChatMessageController::class, 'report']);
 });

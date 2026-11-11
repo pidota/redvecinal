@@ -31,6 +31,9 @@ class RolesAndPermissionsSeeder extends Seeder
         'posts.community.archive',
         'posts.reports.view',
         'posts.reports.resolve',
+        'chat.reports.view',
+        'chat.reports.resolve',
+        'chat.stats.view',
     ];
 
     public const ROLES = [
@@ -75,6 +78,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'posts.community.archive',
             'posts.reports.view',
             'posts.reports.resolve',
+            'chat.reports.view',
+            'chat.reports.resolve',
+            'chat.stats.view',
         ]);
 
         Role::findOrCreate('presidente-junta', 'web');

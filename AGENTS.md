@@ -27,14 +27,24 @@ Monolito modular Laravel para gestión vecinal municipal. Multi-municipalidad pr
 
 ## Fuera de alcance (hasta nueva fase)
 
-- Laravel Reverb, Horizon, Redis en producción, FCM, app Flutter completa.
-- Chat y alertas de emergencia.
-- Panel comunitario para presidentes/vecinos (moderación vía API Sanctum; Fase 3).
+- FCM, app Flutter completa, alertas de emergencia.
+- Panel comunitario web para presidentes/vecinos (API Sanctum + app móvil futura).
+- Despliegue de Reverb/Redis en producción (preparado en código local; sin cambios VPS sin autorización).
 
 ## Fase 3 — Publicaciones
 
 - Dominio `App\Domains\Posts` (revisiones separadas del estado publicado).
 - Documentación: `docs/publicaciones.md`, `docs/moderacion-contenido.md`.
+
+## Fase 4 — Chat grupal
+
+- Dominio `App\Domains\Chat` (salas por junta, mensajes, lecturas, reportes, broadcasting mínimo).
+- Documentación: `docs/chat-tiempo-real.md`, `docs/seguridad-chat.md`.
+- WebSocket: solo eventos de sincronización; contenido vía API REST.
+- Comandos: `php artisan chat:ensure-rooms`, `php artisan chat:reverb-smoke` (local).
+- Reverb local: `php artisan reverb:start` + `php artisan queue:work`; colas `database` sin Redis obligatorio.
+- Broadcasting: solo `ChatRoomSyncBroadcast::$afterCommit` vía `ChatSyncEventDispatcher` (sin `DB::afterCommit` duplicado).
+- `/broadcasting/auth` con `auth:sanctum` (`bootstrap/app.php` → `withBroadcasting`).
 
 ## Comandos útiles
 
@@ -43,4 +53,7 @@ cd backend
 php artisan migrate:status
 php artisan test
 php artisan route:list
+php artisan reverb:start      # solo desarrollo local
+php artisan queue:work
+php artisan chat:reverb-smoke
 ```

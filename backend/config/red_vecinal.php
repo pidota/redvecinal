@@ -21,6 +21,11 @@ return [
     | Publicaciones (Fase 3)
     |--------------------------------------------------------------------------
     */
+    'chat' => [
+        'max_message_length' => 4000,
+        'edit_window_minutes' => 15,
+    ],
+
     'posts' => [
         'max_attachments_per_revision' => 5,
         'max_attachment_size_kb' => 5120,

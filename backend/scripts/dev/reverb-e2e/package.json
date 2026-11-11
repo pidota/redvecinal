@@ -1,0 +1,12 @@
+{
+  "name": "red-vecinal-reverb-e2e",
+  "private": true,
+  "description": "Herramienta temporal de desarrollo — prueba WS Reverb Fase 4",
+  "type": "module",
+  "scripts": {
+    "e2e": "node run.mjs"
+  },
+  "dependencies": {
+    "pusher-js": "^8.4.0"
+  }
+}

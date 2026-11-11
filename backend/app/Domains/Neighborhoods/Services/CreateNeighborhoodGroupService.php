@@ -2,6 +2,7 @@
 
 namespace App\Domains\Neighborhoods\Services;
 
+use App\Domains\Chat\Services\EnsureGroupChatRoomService;
 use App\Domains\Municipality\Models\Municipality;
 use App\Domains\Neighborhoods\Enums\NeighborhoodGroupStatus;
 use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
@@ -10,6 +11,8 @@ use Illuminate\Validation\ValidationException;
 
 class CreateNeighborhoodGroupService
 {
+    public function __construct(private readonly EnsureGroupChatRoomService $ensureChatRoom) {}
+
     public function execute(Municipality $municipality, array $data): NeighborhoodGroup
     {
         $slug = $data['slug'] ?? Str::slug($data['name']);
@@ -23,7 +26,7 @@ class CreateNeighborhoodGroupService
             ]);
         }
 
-        return NeighborhoodGroup::query()->create([
+        $group = NeighborhoodGroup::query()->create([
             'municipality_id' => $municipality->id,
             'name' => $data['name'],
             'slug' => $slug,
@@ -35,5 +38,9 @@ class CreateNeighborhoodGroupService
             'status' => $data['status'] ?? NeighborhoodGroupStatus::Active,
             'settings' => $data['settings'] ?? null,
         ]);
+
+        $this->ensureChatRoom->execute($group);
+
+        return $group;
     }
 }

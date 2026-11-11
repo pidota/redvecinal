@@ -81,6 +81,26 @@ php artisan make:filament-user
 
 Luego asignar un rol de panel (ver [acceso-panel-filament.md](acceso-panel-filament.md)). Sin rol, el login responderá **403** aunque la contraseña sea correcta.
 
+## Chat en tiempo real (Reverb — solo local)
+
+Requisitos: `laravel/reverb` instalado vía Composer, credenciales en `backend/.env` (plantillas en `.env.example`, sin secretos en Git). **Redis no es obligatorio**; usar `QUEUE_CONNECTION=database`.
+
+```powershell
+cd D:\laragon\www\red-vecinal\backend
+# Terminal A
+php artisan reverb:start
+
+# Terminal B (broadcasting encolado)
+php artisan queue:work
+
+# Verificación HTTP (Reverb debe estar escuchando, p. ej. 127.0.0.1:8080)
+php artisan chat:reverb-smoke
+```
+
+En `.env` local típico: `BROADCAST_CONNECTION=reverb`, `APP_URL=http://red-vecinal.test`.
+
+Producción/VPS: **no** modificar en esta fase; ver `docs/chat-tiempo-real.md`.
+
 ## Comandos de validación (Fase 1)
 
 ```powershell

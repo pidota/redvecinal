@@ -40,7 +40,17 @@ Esto evita retirar permisos mientras el usuario siga siendo administrador en otr
 
 ## Permisos
 
-Definidos en `RolesAndPermissionsSeeder` (`municipalities.view`, `neighborhood-groups.*`, `group-members.*`, `group-presidents.assign`).
+Definidos en `RolesAndPermissionsSeeder` (`municipalities.view`, `neighborhood-groups.*`, `group-members.*`, `group-presidents.assign`, `chat.reports.view`, `chat.reports.resolve`, `chat.stats.view`).
+
+### Chat (Fase 4)
+
+| Permiso | Uso |
+|---------|-----|
+| `chat.reports.view` | Ver cola de reportes de mensajes (Filament); no acceso al chat completo |
+| `chat.reports.resolve` | Resolver reportes y consultar contenido reportado (auditado) |
+| `chat.stats.view` | Estadísticas agregadas (reservado) |
+
+La participación en salas de junta **no** usa roles Spatie; usa `group_members` activos y `ChatMembershipGuard`.
 
 ## Autorización por junta
 

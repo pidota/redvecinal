@@ -38,6 +38,11 @@ Además de las tablas estándar de Laravel (usuarios, sesiones, caché, jobs):
 | `post_attachments` | Adjuntos por revisión |
 | `post_comments`, `post_reactions`, `post_reports` | Interacción |
 | `post_moderation_events` | Auditoría de moderación |
+| `chat_rooms` | Sala principal por junta (única por `neighborhood_group_id`) |
+| `chat_messages` | Mensajes (idempotencia `client_message_id`) |
+| `chat_message_reports` | Reportes vecinales |
+| `chat_message_events` | Auditoría de mensajes |
+| `chat_read_states` | Marcador de lectura por usuario y sala |
 
 ### `municipalities`
 
