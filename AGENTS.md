@@ -25,9 +25,16 @@ Monolito modular Laravel para gestión vecinal municipal. Multi-municipalidad pr
 7. **Despliegue**: no ejecutar deploy, push ni cambios en producción sin autorización del responsable del proyecto.
 8. **Dependencias**: no instalar paquetes innecesarios; respetar Laravel 13 y Filament 5.
 
+## Fase 5 — App móvil Flutter (`mobile/`)
+
+- Código Dart en `mobile/lib/`; **Android** plataforma principal en desarrollo.
+- Fase 5.1: tema, navegación (go_router) y pantallas conceptuales **sin** consumir API.
+- Autenticación Sanctum, publicaciones, juntas y chat se integran en subfases 5.2–5.5.
+- Ver `mobile/README.md`; no modificar `backend/` salvo endpoints acordados por subfase.
+
 ## Fuera de alcance (hasta nueva fase)
 
-- FCM, app Flutter completa, alertas de emergencia.
+- FCM, notificaciones push, alertas de emergencia.
 - Panel comunitario web para presidentes/vecinos (API Sanctum + app móvil futura).
 - Despliegue de Reverb/Redis en producción (preparado en código local; sin cambios VPS sin autorización).
 
