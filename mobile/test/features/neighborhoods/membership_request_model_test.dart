@@ -5,6 +5,14 @@ import 'package:red_vecinal/features/neighborhoods/data/models/paginated_members
 import 'membership_request_test_support.dart';
 
 void main() {
+  test('parsea requester para revisión', () {
+    final request = MembershipRequest.fromJson(
+      sampleMembershipRequestJson(includeRequester: true, requesterName: 'María López'),
+    );
+    expect(request.requester?.name, 'María López');
+    expect(request.requesterDisplayName, 'María López');
+  });
+
   test('parsea solicitud con junta anidada', () {
     final request = MembershipRequest.fromJson(sampleMembershipRequestJson());
     expect(request.id, 100);

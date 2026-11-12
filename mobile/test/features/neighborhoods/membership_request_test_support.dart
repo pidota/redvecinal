@@ -1,6 +1,7 @@
 import 'package:red_vecinal/features/neighborhoods/data/membership_request_repository.dart';
 import 'package:red_vecinal/features/neighborhoods/data/models/membership_request.dart';
 import 'package:red_vecinal/features/neighborhoods/data/models/paginated_membership_requests.dart';
+import 'package:red_vecinal/features/neighborhoods/data/models/paginated_neighborhood_groups.dart';
 import 'package:red_vecinal/features/neighborhoods/data/models/neighborhood_group.dart';
 
 import 'neighborhood_test_support.dart';
@@ -11,6 +12,8 @@ Map<String, dynamic> sampleMembershipRequestJson({
   String status = 'pending',
   String? requestNote,
   bool includeGroup = true,
+  bool includeRequester = false,
+  String requesterName = 'Vecino solicitante',
 }) {
   return {
     'id': id,
@@ -23,6 +26,7 @@ Map<String, dynamic> sampleMembershipRequestJson({
     'cancelled_at': null,
     'created_at': '2026-01-15T10:00:00.000000Z',
     if (includeGroup) 'neighborhood_group': sampleGroupJson(id: groupId),
+    if (includeRequester) 'requester': {'id': 900, 'name': requesterName},
   };
 }
 
@@ -42,6 +46,17 @@ class FakeMembershipRequestGateway implements MembershipRequestGateway {
     this.cancelFailure,
     this.submitCallCount = 0,
     this.myRequestsCallCount = 0,
+    this.reviewableGroupsPage,
+    this.reviewableGroupsPagesByNumber,
+    this.reviewableGroupsFailure,
+    this.groupRequestsPagesByNumber,
+    this.groupRequestsFailure,
+    this.approveFailure,
+    this.rejectFailure,
+    this.approveDelayMs = 0,
+    this.rejectDelayMs = 0,
+    this.approveCallCount = 0,
+    this.rejectCallCount = 0,
   }) : contextGroup = contextGroup ?? sampleNeighborhoodGroup();
 
   NeighborhoodGroup? contextGroup;
@@ -58,6 +73,18 @@ class FakeMembershipRequestGateway implements MembershipRequestGateway {
   Object? cancelFailure;
   int submitCallCount;
   int myRequestsCallCount;
+  PaginatedNeighborhoodGroups? reviewableGroupsPage;
+  Map<int, PaginatedNeighborhoodGroups>? reviewableGroupsPagesByNumber;
+  Object? reviewableGroupsFailure;
+  Map<String, PaginatedMembershipRequests>? groupRequestsPagesByNumber;
+  Object? groupRequestsFailure;
+  Object? approveFailure;
+  Object? rejectFailure;
+  int approveDelayMs;
+  int rejectDelayMs;
+  int approveCallCount;
+  int rejectCallCount;
+  int reviewableGroupsCallCount = 0;
 
   @override
   Future<void> cancel(int requestId) async {
@@ -100,6 +127,77 @@ class FakeMembershipRequestGateway implements MembershipRequestGateway {
           currentPage: page,
           lastPage: 1,
         );
+  }
+
+  @override
+  Future<PaginatedNeighborhoodGroups> reviewableGroups({int page = 1}) async {
+    reviewableGroupsCallCount++;
+    if (reviewableGroupsFailure != null) {
+      throw reviewableGroupsFailure!;
+    }
+    final byPage = reviewableGroupsPagesByNumber;
+    if (byPage != null && byPage.containsKey(page)) {
+      return byPage[page]!;
+    }
+    return reviewableGroupsPage ??
+        PaginatedNeighborhoodGroups(
+          items: [sampleNeighborhoodGroup()],
+          currentPage: page,
+          lastPage: 1,
+        );
+  }
+
+  @override
+  Future<PaginatedMembershipRequests> groupRequests({
+    required int groupId,
+    required String status,
+    int page = 1,
+  }) async {
+    if (groupRequestsFailure != null) {
+      throw groupRequestsFailure!;
+    }
+    final key = '$groupId|$status|$page';
+    final map = groupRequestsPagesByNumber;
+    if (map != null && map.containsKey(key)) {
+      return map[key]!;
+    }
+    return PaginatedMembershipRequests(
+      items: [
+        MembershipRequest.fromJson(
+          sampleMembershipRequestJson(groupId: groupId, includeRequester: true),
+        ),
+      ],
+      currentPage: page,
+      lastPage: 1,
+    );
+  }
+
+  @override
+  Future<MembershipRequest> approve(int requestId, {String? reviewNote}) async {
+    approveCallCount++;
+    if (approveDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: approveDelayMs));
+    }
+    if (approveFailure != null) {
+      throw approveFailure!;
+    }
+    return MembershipRequest.fromJson(
+      sampleMembershipRequestJson(id: requestId, status: 'approved', requestNote: reviewNote),
+    );
+  }
+
+  @override
+  Future<MembershipRequest> reject(int requestId, {String? reviewNote}) async {
+    rejectCallCount++;
+    if (rejectDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: rejectDelayMs));
+    }
+    if (rejectFailure != null) {
+      throw rejectFailure!;
+    }
+    return MembershipRequest.fromJson(
+      sampleMembershipRequestJson(id: requestId, status: 'rejected', requestNote: reviewNote),
+    );
   }
 
   @override

@@ -7,6 +7,7 @@ import '../../../core/network/api_failure.dart';
 import 'models/membership_request.dart';
 import 'models/neighborhood_group.dart';
 import 'models/paginated_membership_requests.dart';
+import 'models/paginated_neighborhood_groups.dart';
 
 abstract class MembershipRequestGateway {
   Future<NeighborhoodGroup> membershipContext(int groupId);
@@ -16,6 +17,18 @@ abstract class MembershipRequestGateway {
   Future<PaginatedMembershipRequests> myRequests({int page = 1});
 
   Future<void> cancel(int requestId);
+
+  Future<PaginatedNeighborhoodGroups> reviewableGroups({int page = 1});
+
+  Future<PaginatedMembershipRequests> groupRequests({
+    required int groupId,
+    required String status,
+    int page = 1,
+  });
+
+  Future<MembershipRequest> approve(int requestId, {String? reviewNote});
+
+  Future<MembershipRequest> reject(int requestId, {String? reviewNote});
 }
 
 final membershipRequestRepositoryProvider = Provider<MembershipRequestGateway>((ref) {
@@ -99,6 +112,104 @@ class MembershipRequestRepository implements MembershipRequestGateway {
   }
 
   @override
+  Future<PaginatedNeighborhoodGroups> reviewableGroups({int page = 1}) async {
+    _ensureConfigured();
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/me/reviewable-groups',
+        queryParameters: {'page': page},
+      );
+
+      final payload = response.data;
+      if (response.statusCode != 200 || payload == null) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+        );
+      }
+
+      final meta = payload['meta'];
+      final currentPage = meta is Map<String, dynamic> ? (meta['current_page'] as int? ?? page) : page;
+      final lastPage = meta is Map<String, dynamic> ? (meta['last_page'] as int? ?? currentPage) : currentPage;
+
+      return PaginatedNeighborhoodGroups(
+        items: _parseGroupList(payload['data']),
+        currentPage: currentPage,
+        lastPage: lastPage,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<PaginatedMembershipRequests> groupRequests({
+    required int groupId,
+    required String status,
+    int page = 1,
+  }) async {
+    _ensureConfigured();
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/groups/$groupId/membership-requests',
+        queryParameters: {'page': page, 'status': status},
+      );
+
+      final payload = response.data;
+      if (response.statusCode != 200 || payload == null) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+        );
+      }
+
+      final meta = payload['meta'];
+      final currentPage = meta is Map<String, dynamic> ? (meta['current_page'] as int? ?? page) : page;
+      final lastPage = meta is Map<String, dynamic> ? (meta['last_page'] as int? ?? currentPage) : currentPage;
+
+      return PaginatedMembershipRequests(
+        items: _parseRequestList(payload['data']),
+        currentPage: currentPage,
+        lastPage: lastPage,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<MembershipRequest> approve(int requestId, {String? reviewNote}) async {
+    return _decisionPost(requestId, '/membership-requests/$requestId/approve', reviewNote);
+  }
+
+  @override
+  Future<MembershipRequest> reject(int requestId, {String? reviewNote}) async {
+    return _decisionPost(requestId, '/membership-requests/$requestId/reject', reviewNote);
+  }
+
+  Future<MembershipRequest> _decisionPost(int requestId, String path, String? reviewNote) async {
+    _ensureConfigured();
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        path,
+        data: {
+          if (reviewNote != null && reviewNote.trim().isNotEmpty)
+            'review_note': reviewNote.trim(),
+        },
+      );
+
+      final status = response.statusCode ?? 0;
+      if (status == 200) {
+        return _parseRequestResponse(response);
+      }
+
+      throw DioException(requestOptions: response.requestOptions, response: response);
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
   Future<void> cancel(int requestId) async {
     _ensureConfigured();
     try {
@@ -151,6 +262,17 @@ class MembershipRequestRepository implements MembershipRequestGateway {
     }
 
     return MembershipRequest.fromJson(raw);
+  }
+
+  List<NeighborhoodGroup> _parseGroupList(dynamic raw) {
+    if (raw is! List) {
+      return const [];
+    }
+
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(NeighborhoodGroup.fromJson)
+        .toList();
   }
 
   List<MembershipRequest> _parseRequestList(dynamic raw) {

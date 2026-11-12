@@ -11,8 +11,10 @@ import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/neighborhoods/presentation/neighborhood_detail_invalid_route_screen.dart';
 import '../../features/neighborhoods/presentation/neighborhood_detail_screen.dart';
+import '../../features/neighborhoods/presentation/group_membership_review_screen.dart';
 import '../../features/neighborhoods/presentation/neighborhood_join_screen.dart';
 import '../../features/neighborhoods/presentation/neighborhoods_screen.dart';
+import '../../features/neighborhoods/presentation/reviewable_groups_screen.dart';
 import '../../features/posts/presentation/posts_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import 'main_shell_scaffold.dart';
@@ -95,6 +97,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/neighborhoods',
                 builder: (context, state) => const NeighborhoodsScreen(),
                 routes: [
+                  GoRoute(
+                    path: 'review',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) => const ReviewableGroupsScreen(),
+                  ),
+                  GoRoute(
+                    path: ':groupId/review-requests',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) {
+                      final raw = state.pathParameters['groupId'] ?? '';
+                      final id = int.tryParse(raw);
+                      if (id == null) {
+                        return const NeighborhoodDetailInvalidRouteScreen();
+                      }
+                      return GroupMembershipReviewScreen(groupId: id);
+                    },
+                  ),
                   GoRoute(
                     path: ':groupId/join',
                     parentNavigatorKey: _rootNavigatorKey,

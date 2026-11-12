@@ -1,5 +1,19 @@
 import 'neighborhood_group.dart';
 
+class MembershipRequester {
+  const MembershipRequester({required this.id, required this.name});
+
+  factory MembershipRequester.fromJson(Map<String, dynamic> json) {
+    return MembershipRequester(
+      id: json['id'] as int,
+      name: json['name'] as String,
+    );
+  }
+
+  final int id;
+  final String name;
+}
+
 class MembershipRequest {
   const MembershipRequest({
     required this.id,
@@ -12,6 +26,7 @@ class MembershipRequest {
     this.rejectedAt,
     this.cancelledAt,
     this.neighborhoodGroup,
+    this.requester,
   });
 
   factory MembershipRequest.fromJson(Map<String, dynamic> json) {
@@ -19,6 +34,12 @@ class MembershipRequest {
     final rawGroup = json['neighborhood_group'];
     if (rawGroup is Map<String, dynamic>) {
       group = NeighborhoodGroup.fromJson(rawGroup);
+    }
+
+    MembershipRequester? requester;
+    final rawRequester = json['requester'];
+    if (rawRequester is Map<String, dynamic>) {
+      requester = MembershipRequester.fromJson(rawRequester);
     }
 
     return MembershipRequest(
@@ -32,6 +53,7 @@ class MembershipRequest {
       rejectedAt: _parseDate(json['rejected_at']),
       cancelledAt: _parseDate(json['cancelled_at']),
       neighborhoodGroup: group,
+      requester: requester,
     );
   }
 
@@ -45,6 +67,7 @@ class MembershipRequest {
   final DateTime? rejectedAt;
   final DateTime? cancelledAt;
   final NeighborhoodGroup? neighborhoodGroup;
+  final MembershipRequester? requester;
 
   bool get isPending => status == 'pending';
 
@@ -53,10 +76,13 @@ class MembershipRequest {
 
   String get municipalityLabel => neighborhoodGroup?.municipalityLabel ?? '';
 
+  String get requesterDisplayName => requester?.name ?? 'Vecino';
+
   MembershipRequest copyWith({
     String? status,
     String? reviewNote,
     DateTime? cancelledAt,
+    MembershipRequester? requester,
   }) {
     return MembershipRequest(
       id: id,
@@ -69,6 +95,7 @@ class MembershipRequest {
       rejectedAt: rejectedAt,
       cancelledAt: cancelledAt ?? this.cancelledAt,
       neighborhoodGroup: neighborhoodGroup,
+      requester: requester ?? this.requester,
     );
   }
 
