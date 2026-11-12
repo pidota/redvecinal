@@ -99,16 +99,20 @@ class GroupMemberPolicy
     {
         $group = $member->neighborhoodGroup;
 
-        if (! $group?->isAdministrable() || ! $user->can($permission)) {
+        if (! $group?->isAdministrable()) {
             return false;
         }
 
         if ($user->isActivePresidentOf($group)) {
-            return false;
+            return true;
         }
 
         $ownMembership = $user->activeGroupMembershipFor($group);
         if ($ownMembership?->membership_role === MembershipRole::Moderator) {
+            return false;
+        }
+
+        if (! $user->can($permission)) {
             return false;
         }
 

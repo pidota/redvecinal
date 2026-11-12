@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ChatMessageController;
 use App\Http\Controllers\Api\V1\ChatRoomController;
+use App\Http\Controllers\Api\V1\MembershipRequestController;
 use App\Http\Controllers\Api\V1\NeighborhoodGroupController;
 use App\Http\Controllers\Api\V1\PostAttachmentController;
 use App\Http\Controllers\Api\V1\PostCommentController;
@@ -30,6 +31,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/groups/{group}', [NeighborhoodGroupController::class, 'show']);
     Route::get('/me/groups', [NeighborhoodGroupController::class, 'myGroups']);
     Route::get('/groups/{group}/members', [NeighborhoodGroupController::class, 'members']);
+    Route::get('/groups/{group}/membership-context', [MembershipRequestController::class, 'membershipContext']);
+    Route::post('/groups/{group}/membership-requests', [MembershipRequestController::class, 'store'])
+        ->middleware('throttle:membership-requests');
+    Route::get('/groups/{group}/membership-requests', [MembershipRequestController::class, 'indexForGroup']);
+
+    Route::get('/me/membership-requests', [MembershipRequestController::class, 'myIndex']);
+    Route::delete('/me/membership-requests/{membershipRequest}', [MembershipRequestController::class, 'destroy']);
+
+    Route::post('/membership-requests/{membershipRequest}/approve', [MembershipRequestController::class, 'approve']);
+    Route::post('/membership-requests/{membershipRequest}/reject', [MembershipRequestController::class, 'reject']);
 
     Route::get('/posts', [PostController::class, 'index']);
     Route::get('/me/posts', [PostController::class, 'mine']);

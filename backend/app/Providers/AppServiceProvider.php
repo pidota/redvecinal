@@ -7,8 +7,10 @@ use App\Domains\Municipality\Observers\MunicipalityMemberObserver;
 use App\Domains\Municipality\Policies\MunicipalityMemberPolicy;
 use App\Domains\Neighborhoods\Models\GroupMember;
 use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
+use App\Domains\Neighborhoods\Models\NeighborhoodMembershipRequest;
 use App\Domains\Neighborhoods\Policies\GroupMemberPolicy;
 use App\Domains\Neighborhoods\Policies\NeighborhoodGroupPolicy;
+use App\Domains\Neighborhoods\Policies\NeighborhoodMembershipRequestPolicy;
 use App\Domains\Chat\Models\ChatMessage;
 use App\Domains\Chat\Models\ChatMessageReport;
 use App\Domains\Chat\Models\ChatRoom;
@@ -40,6 +42,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('membership-requests', function (Request $request) {
+            $perUser = config('red_vecinal.membership_requests.store_per_user_per_hour', 20);
+
+            return Limit::perHour($perUser)->by('membership-requests|'.$request->user()?->id.'|'.$request->ip());
+        });
+
         RateLimiter::for('mobile-login', function (Request $request): array {
             $perIdentity = config('red_vecinal.mobile_auth.login_attempts_per_identity_per_minute', 5);
             $perIp = config('red_vecinal.mobile_auth.login_attempts_per_ip_per_minute', 30);
@@ -60,6 +68,7 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::policy(NeighborhoodGroup::class, NeighborhoodGroupPolicy::class);
         Gate::policy(GroupMember::class, GroupMemberPolicy::class);
+        Gate::policy(NeighborhoodMembershipRequest::class, NeighborhoodMembershipRequestPolicy::class);
         Gate::policy(MunicipalityMember::class, MunicipalityMemberPolicy::class);
         Gate::policy(Post::class, PostPolicy::class);
         Gate::policy(ChatRoom::class, ChatRoomPolicy::class);

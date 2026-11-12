@@ -35,6 +35,11 @@ return [
     | por token). No modifica config/sanctum.php → expiration (null conserva
     | smoke tests y tokens emitidos sin expires_at).
     */
+    'membership_requests' => [
+        'rejection_cooldown_days' => (int) env('MEMBERSHIP_REQUEST_COOLDOWN_DAYS', 7),
+        'store_per_user_per_hour' => (int) env('MEMBERSHIP_REQUEST_STORE_PER_HOUR', 20),
+    ],
+
     'mobile_auth' => [
         'token_expiration_days' => (int) env('MOBILE_TOKEN_EXPIRATION_DAYS', 90),
         'login_attempts_per_identity_per_minute' => 5,

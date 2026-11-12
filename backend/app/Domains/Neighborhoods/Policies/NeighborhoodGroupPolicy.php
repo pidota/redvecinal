@@ -2,12 +2,18 @@
 
 namespace App\Domains\Neighborhoods\Policies;
 
+use App\Domains\Auth\Services\MobileApiAccessService;
 use App\Domains\Neighborhoods\Enums\MembershipStatus;
 use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
+use App\Domains\Neighborhoods\Support\NeighborhoodMunicipalityScope;
 use App\Models\User;
 
 class NeighborhoodGroupPolicy
 {
+    public function __construct(
+        private readonly NeighborhoodMunicipalityScope $scope,
+        private readonly MobileApiAccessService $mobileAccess,
+    ) {}
     public function viewAny(User $user): bool
     {
         if ($user->can('neighborhood-groups.view')) {
@@ -66,6 +72,29 @@ class NeighborhoodGroupPolicy
     {
         return $this->update($user, $group)
             || ($group->isAdministrable() && $user->isActivePresidentOf($group));
+    }
+
+    /**
+     * Vista descriptiva mínima para solicitar incorporación (sin membresía activa).
+     */
+    public function viewMembershipContext(User $user, NeighborhoodGroup $group): bool
+    {
+        if (! $this->mobileAccess->mayObtainMobileToken($user)) {
+            return false;
+        }
+
+        if ($user->groupMemberships()
+            ->where('neighborhood_group_id', $group->id)
+            ->where('status', MembershipStatus::Active)
+            ->exists()) {
+            return true;
+        }
+
+        if (! $group->isAdministrable()) {
+            return false;
+        }
+
+        return $this->scope->isMunicipalityAllowed($user, $group->municipality_id);
     }
 
     private function matchesMunicipalityScope(User $user, int $municipalityId): bool

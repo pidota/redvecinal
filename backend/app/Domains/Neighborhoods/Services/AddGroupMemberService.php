@@ -5,8 +5,11 @@ namespace App\Domains\Neighborhoods\Services;
 use App\Domains\Neighborhoods\Enums\MembershipRole;
 use App\Domains\Neighborhoods\Enums\MembershipStatus;
 use App\Domains\Neighborhoods\Exceptions\NeighborhoodDomainException;
+use App\Domains\Neighborhoods\Enums\MembershipRequestStatus;
 use App\Domains\Neighborhoods\Models\GroupMember;
 use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
+use App\Domains\Neighborhoods\Models\NeighborhoodMembershipRequest;
+use App\Domains\Neighborhoods\Support\GroupUserMembershipLocks;
 use App\Domains\Neighborhoods\Support\MembershipEventRecorder;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -27,14 +30,24 @@ class AddGroupMemberService
         }
 
         return DB::transaction(function () use ($group, $user, $actor, $initialStatus, $role) {
-            $existing = GroupMember::query()
-                ->where('neighborhood_group_id', $group->id)
-                ->where('user_id', $user->id)
-                ->lockForUpdate()
-                ->first();
+            GroupUserMembershipLocks::lockMembershipRequestsForPair($group->id, $user->id);
+
+            $existing = GroupUserMembershipLocks::lockGroupMemberForPair($group->id, $user->id);
 
             if ($existing) {
                 throw new NeighborhoodDomainException('El usuario ya tiene una membresía en esta junta.');
+            }
+
+            $openRequest = NeighborhoodMembershipRequest::query()
+                ->where('neighborhood_group_id', $group->id)
+                ->where('user_id', $user->id)
+                ->where('status', MembershipRequestStatus::Pending)
+                ->exists();
+
+            if ($openRequest) {
+                throw new NeighborhoodDomainException(
+                    'El usuario tiene una solicitud de incorporación pendiente en la app móvil.'
+                );
             }
 
             if ($role === MembershipRole::President) {

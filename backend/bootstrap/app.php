@@ -25,4 +25,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json(['message' => $e->getMessage()], 422);
             }
         });
+
+        $exceptions->render(function (\App\Domains\Neighborhoods\Exceptions\MembershipRequestException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], $e->httpStatus);
+            }
+        });
     })->create();
