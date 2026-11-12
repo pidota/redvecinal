@@ -13,6 +13,7 @@ void main() {
     await tester.tap(navBarIcon(Icons.holiday_village_outlined));
     await tester.pumpAndSettle();
     expect(find.text('Sin juntas'), findsOneWidget);
+    expect(find.text('Explorar'), findsOneWidget);
 
     await tester.tap(navBarIcon(Icons.article_outlined));
     await tester.pumpAndSettle();

@@ -10,11 +10,15 @@ const testAppConfig = AppConfig(
   apiBaseUrl: 'http://test.api/v1',
 );
 
-AuthUser sampleAuthUser({List<MunicipalityMembership>? memberships}) {
+AuthUser sampleAuthUser({
+  int id = 1,
+  String email = 'vecino@test.com',
+  List<MunicipalityMembership>? memberships,
+}) {
   return AuthUser(
-    id: 1,
+    id: id,
     name: 'Vecino Test',
-    email: 'vecino@test.com',
+    email: email,
     municipalityMemberships: memberships ??
         [
           MunicipalityMembership(

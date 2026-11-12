@@ -46,7 +46,7 @@ Rutas directas (estrategia path, sin `#`):
 
 - `/splash`, `/login`
 - `/home`, `/neighborhoods`, `/posts`, `/chat`, `/profile`
-- `/neighborhoods/ejemplo` (detalle conceptual, sin barra inferior)
+- `/neighborhoods/{id}` (detalle de junta, sin barra inferior)
 
 **Limitaciones Web:** el lienzo Flutter expone poca accesibilidad DOM; los clics en la barra inferior se validan mejor con `flutter test` o manualmente en Chrome. Reverb, almacenamiento seguro y plugins nativos pueden comportarse distinto que en Android.
 

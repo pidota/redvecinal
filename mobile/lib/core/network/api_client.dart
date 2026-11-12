@@ -138,6 +138,10 @@ ApiFailure mapDioError(DioException error, {required bool loginRequest}) {
     return ApiForbiddenFailure(message);
   }
 
+  if (status == 404) {
+    return const ApiNotFoundFailure();
+  }
+
   if (status == 422) {
     return ApiValidationFailure(_extractValidationErrors(response.data));
   }

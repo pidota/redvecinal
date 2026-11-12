@@ -102,6 +102,72 @@ $checks[] = [
     'http='.$myGroups['code'].' count='.count($groupsData),
 ];
 
+$fixtureGroupId = $myGroupsOk ? (int) ($groupsData[0]['id'] ?? 0) : 0;
+
+$indexGroups = request('GET', "$base/groups?page=1", $token);
+$indexJson = json_decode($indexGroups['body'], true);
+$indexData = is_array($indexJson['data'] ?? null) ? $indexJson['data'] : [];
+$indexIds = array_map(static fn ($row) => (int) ($row['id'] ?? 0), $indexData);
+$indexOk = $indexGroups['code'] === 200
+    && is_array($indexJson['data'] ?? null)
+    && ($fixtureGroupId === 0 || in_array($fixtureGroupId, $indexIds, true));
+if ($indexOk && $fixtureGroupId > 0) {
+    $first = null;
+    foreach ($indexData as $row) {
+        if ((int) ($row['id'] ?? 0) === $fixtureGroupId) {
+            $first = $row;
+            break;
+        }
+    }
+    $indexOk = is_array($first) && isset($first['municipality']['slug']);
+    foreach (['contact_email', 'contact_phone'] as $field) {
+        if (str_contains($indexGroups['body'], "\"$field\"")) {
+            $indexOk = false;
+        }
+    }
+}
+$meta = is_array($indexJson['meta'] ?? null) ? $indexJson['meta'] : [];
+$lastPage = (int) ($meta['last_page'] ?? 1);
+$currentPage = (int) ($meta['current_page'] ?? 0);
+if ($indexOk) {
+    $indexOk = $currentPage === 1 && $lastPage >= 1;
+}
+$page2Detail = 'skipped last_page=1';
+$page2Ok = true;
+if ($indexOk && $lastPage >= 2) {
+    $indexGroups2 = request('GET', "$base/groups?page=2", $token);
+    $indexJson2 = json_decode($indexGroups2['body'], true);
+    $indexData2 = is_array($indexJson2['data'] ?? null) ? $indexJson2['data'] : [];
+    $meta2 = is_array($indexJson2['meta'] ?? null) ? $indexJson2['meta'] : [];
+    $page2Ok = $indexGroups2['code'] === 200
+        && (int) ($meta2['current_page'] ?? 0) === 2
+        && is_array($indexJson2['data'] ?? null);
+    $page2Detail = 'http='.$indexGroups2['code'].' count='.count($indexData2).' last_page='.$lastPage;
+} elseif ($indexOk) {
+    $page2Detail = 'limitation fixture single page (last_page='.$lastPage.')';
+}
+$checks[] = ['GET /groups', $indexOk, 'http='.$indexGroups['code'].' count='.count($indexData).' meta='.$currentPage.'/'.$lastPage];
+$checks[] = ['GET /groups page 2', $page2Ok, $page2Detail];
+
+$showOk = false;
+$showDetail = 'skip';
+if ($fixtureGroupId > 0) {
+    $show = request('GET', "$base/groups/$fixtureGroupId", $token);
+    $showJson = json_decode($show['body'], true);
+    $showData = is_array($showJson['data'] ?? null) ? $showJson['data'] : null;
+    $showOk = $show['code'] === 200
+        && is_array($showData)
+        && (int) ($showData['id'] ?? 0) === $fixtureGroupId
+        && isset($showData['municipality']['name']);
+    foreach (['contact_email', 'contact_phone'] as $field) {
+        if (str_contains($show['body'], "\"$field\"")) {
+            $showOk = false;
+        }
+    }
+    $showDetail = 'http='.$show['code'];
+}
+$checks[] = ['GET /groups/{id}', $showOk, $showDetail];
+
 $logout = request('POST', "$base/auth/logout", $token);
 $checks[] = ['POST logout', in_array($logout['code'], [200, 204], true), "http={$logout['code']}"];
 

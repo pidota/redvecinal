@@ -30,6 +30,11 @@ final class ApiForbiddenFailure extends ApiFailure {
       : super(detail ?? 'No tienes permiso para realizar esta acción.');
 }
 
+final class ApiNotFoundFailure extends ApiFailure {
+  const ApiNotFoundFailure()
+      : super('No encontramos esa junta o ya no está disponible.');
+}
+
 final class ApiValidationFailure extends ApiFailure {
   const ApiValidationFailure(this.fieldErrors)
       : super('Revisa los datos ingresados.');

@@ -4,6 +4,7 @@ import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_state.dart';
 import '../data/models/neighborhood_group.dart';
 import '../data/neighborhood_repository.dart';
+import 'neighborhood_session.dart';
 
 class MyGroupsController extends AutoDisposeAsyncNotifier<List<NeighborhoodGroup>> {
   @override
@@ -13,16 +14,30 @@ class MyGroupsController extends AutoDisposeAsyncNotifier<List<NeighborhoodGroup
     if (auth is! AuthAuthenticated) {
       return Future.value(const []);
     }
-    return ref.read(neighborhoodRepositoryProvider).myGroups();
+    final epoch = neighborhoodSessionEpoch(ref);
+    if (epoch == null) {
+      return Future.value(const []);
+    }
+    return _loadGuarded(epoch);
+  }
+
+  Future<List<NeighborhoodGroup>> _loadGuarded(int epoch) async {
+    final groups = await ref.read(neighborhoodRepositoryProvider).myGroups();
+    if (neighborhoodSessionEpoch(ref) != epoch) {
+      return const [];
+    }
+    return groups;
   }
 
   Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(_load);
-  }
+    final epoch = neighborhoodSessionEpoch(ref);
+    if (epoch == null) {
+      state = const AsyncValue.data([]);
+      return;
+    }
 
-  Future<List<NeighborhoodGroup>> _load() {
-    return ref.read(neighborhoodRepositoryProvider).myGroups();
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() => _loadGuarded(epoch));
   }
 }
 

@@ -159,6 +159,9 @@ class AuthController extends Notifier<AuthState> {
     }
     return null;
   }
+
+  /// Incrementa en login, logout e invalidación; sirve para descartar respuestas tardías.
+  int get sessionEpoch => _sessionEpoch;
 }
 
 final authControllerProvider = NotifierProvider<AuthController, AuthState>(AuthController.new);

@@ -28,6 +28,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Mis juntas'), findsWidgets);
+    expect(find.text('Explorar'), findsOneWidget);
     expect(find.text('Junta Centro'), findsOneWidget);
     expect(find.text('Chépica'), findsOneWidget);
     expect(find.text('Suspendida'), findsOneWidget);
