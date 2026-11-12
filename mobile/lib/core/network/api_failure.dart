@@ -35,9 +35,14 @@ final class ApiNotFoundFailure extends ApiFailure {
       : super('No encontramos esa junta o ya no está disponible.');
 }
 
+final class ApiConflictFailure extends ApiFailure {
+  const ApiConflictFailure([String? detail])
+      : super(detail ?? 'La operación no pudo completarse por un conflicto de estado.');
+}
+
 final class ApiValidationFailure extends ApiFailure {
-  const ApiValidationFailure(this.fieldErrors)
-      : super('Revisa los datos ingresados.');
+  const ApiValidationFailure(this.fieldErrors, [String? message])
+      : super(message ?? 'Revisa los datos ingresados.');
 
   final Map<String, List<String>> fieldErrors;
 }

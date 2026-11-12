@@ -142,8 +142,15 @@ ApiFailure mapDioError(DioException error, {required bool loginRequest}) {
     return const ApiNotFoundFailure();
   }
 
+  if (status == 409) {
+    final message = _extractMessage(response.data);
+    return ApiConflictFailure(message);
+  }
+
   if (status == 422) {
-    return ApiValidationFailure(_extractValidationErrors(response.data));
+    final fieldErrors = _extractValidationErrors(response.data);
+    final message = _extractMessage(response.data);
+    return ApiValidationFailure(fieldErrors, message);
   }
 
   if (status == 429) {

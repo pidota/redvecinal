@@ -74,7 +74,13 @@ class ExploreGroupsTab extends ConsumerWidget {
                 child: GroupListTile(
                   group: group,
                   isMember: memberIds.contains(group.id),
-                  onTap: () => context.push('/neighborhoods/${group.id}'),
+                  onTap: () {
+                    if (memberIds.contains(group.id)) {
+                      context.push('/neighborhoods/${group.id}');
+                    } else {
+                      context.push('/neighborhoods/${group.id}/join');
+                    }
+                  },
                 ),
               );
             },

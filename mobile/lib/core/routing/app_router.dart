@@ -11,6 +11,7 @@ import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/neighborhoods/presentation/neighborhood_detail_invalid_route_screen.dart';
 import '../../features/neighborhoods/presentation/neighborhood_detail_screen.dart';
+import '../../features/neighborhoods/presentation/neighborhood_join_screen.dart';
 import '../../features/neighborhoods/presentation/neighborhoods_screen.dart';
 import '../../features/posts/presentation/posts_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
@@ -94,6 +95,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/neighborhoods',
                 builder: (context, state) => const NeighborhoodsScreen(),
                 routes: [
+                  GoRoute(
+                    path: ':groupId/join',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) {
+                      final raw = state.pathParameters['groupId'] ?? '';
+                      final id = int.tryParse(raw);
+                      if (id == null) {
+                        return const NeighborhoodDetailInvalidRouteScreen();
+                      }
+                      return NeighborhoodJoinScreen(groupId: id);
+                    },
+                  ),
                   GoRoute(
                     path: ':groupId',
                     parentNavigatorKey: _rootNavigatorKey,
