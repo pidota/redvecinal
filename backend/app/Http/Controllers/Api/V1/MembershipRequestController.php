@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domains\Neighborhoods\Enums\MembershipRequestStatus;
 use App\Domains\Neighborhoods\Exceptions\MembershipRequestException;
 use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
 use App\Domains\Neighborhoods\Models\NeighborhoodMembershipRequest;
@@ -15,6 +16,7 @@ use App\Http\Resources\Api\V1\NeighborhoodGroupResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\Rule;
 
 class MembershipRequestController extends Controller
 {
@@ -72,13 +74,20 @@ class MembershipRequestController extends Controller
     {
         $this->authorize('viewAny', [NeighborhoodMembershipRequest::class, $group]);
 
-        $requests = NeighborhoodMembershipRequest::query()
+        $validated = $request->validate([
+            'status' => ['sometimes', Rule::enum(MembershipRequestStatus::class)],
+        ]);
+
+        $query = NeighborhoodMembershipRequest::query()
             ->where('neighborhood_group_id', $group->id)
             ->with(['user', 'neighborhoodGroup.municipality'])
-            ->orderByDesc('created_at')
-            ->paginate();
+            ->orderByDesc('created_at');
 
-        return MembershipRequestResource::collection($requests);
+        if (isset($validated['status'])) {
+            $query->where('status', $validated['status']);
+        }
+
+        return MembershipRequestResource::collection($query->paginate());
     }
 
     public function approve(

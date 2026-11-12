@@ -30,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/groups', [NeighborhoodGroupController::class, 'index']);
     Route::get('/groups/{group}', [NeighborhoodGroupController::class, 'show']);
     Route::get('/me/groups', [NeighborhoodGroupController::class, 'myGroups']);
+    Route::get('/me/reviewable-groups', [NeighborhoodGroupController::class, 'reviewableGroups']);
     Route::get('/groups/{group}/members', [NeighborhoodGroupController::class, 'members']);
     Route::get('/groups/{group}/membership-context', [MembershipRequestController::class, 'membershipContext']);
     Route::post('/groups/{group}/membership-requests', [MembershipRequestController::class, 'store'])

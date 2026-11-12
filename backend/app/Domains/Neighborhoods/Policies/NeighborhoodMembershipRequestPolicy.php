@@ -19,7 +19,7 @@ class NeighborhoodMembershipRequestPolicy
 
     public function viewAny(User $user, NeighborhoodGroup $group): bool
     {
-        return $this->canReview($user, $group);
+        return $this->canReviewMembershipRequests($user, $group);
     }
 
     public function view(User $user, NeighborhoodMembershipRequest $request): bool
@@ -30,7 +30,7 @@ class NeighborhoodMembershipRequestPolicy
 
         $group = $request->neighborhoodGroup;
 
-        return $group !== null && $this->canReview($user, $group);
+        return $group !== null && $this->canReviewMembershipRequests($user, $group);
     }
 
     public function create(User $user, NeighborhoodGroup $group): bool
@@ -55,14 +55,22 @@ class NeighborhoodMembershipRequestPolicy
     {
         $group = $request->neighborhoodGroup;
 
-        return $group !== null && $this->canReview($user, $group);
+        return $group !== null && $this->canReviewMembershipRequests($user, $group);
     }
 
     public function reject(User $user, NeighborhoodMembershipRequest $request): bool
     {
         $group = $request->neighborhoodGroup;
 
-        return $group !== null && $this->canReview($user, $group);
+        return $group !== null && $this->canReviewMembershipRequests($user, $group);
+    }
+
+    /**
+     * Misma regla que viewAny/approve/reject para solicitudes de incorporación.
+     */
+    public function canReviewMembershipRequests(User $user, NeighborhoodGroup $group): bool
+    {
+        return $this->canReview($user, $group);
     }
 
     private function canReview(User $user, NeighborhoodGroup $group): bool

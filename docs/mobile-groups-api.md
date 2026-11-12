@@ -2,6 +2,24 @@
 
 Prefijo: `/api/v1`. Autenticación: **Bearer Sanctum** en todas las rutas de este documento.
 
+## GET `/me/reviewable-groups`
+
+Juntas en las que el usuario puede **revisar solicitudes de incorporación** (`NeighborhoodMembershipRequestPolicy`: presidente activo de la junta, administrador municipal autorizado en el municipio, o superadministrador). Solo juntas con `status = active` (administrables).
+
+**Parámetros:** paginación Laravel (`page`).
+
+**Respuesta 200:** colección paginada de `NeighborhoodGroup` (mismo recurso que `/me/groups`).
+
+**Errores:**
+
+| HTTP | Causa |
+|------|--------|
+| 401 | Sin Sanctum |
+
+Usuarios sin capacidad de revisión reciben `data: []` (no es error).
+
+**Nota:** coexisten solicitudes vía API (`neighborhood_membership_requests`) y altas con estado `pending` en `group_members` gestionadas desde Filament; no comparten la misma bandeja en el panel. Resolver una vía no implica sincronizar automáticamente la vista de la otra sin recargar desde el servidor.
+
 ## GET `/me/groups`
 
 Juntas en las que el usuario autenticado tiene **membresía activa** (`group_members.status = active`). Incluye juntas cuyo estado sea `inactive` o `suspended` si la membresía sigue activa.
@@ -78,7 +96,7 @@ Rate limit en creación: `throttle:membership-requests` (config `red_vecinal.mem
 | POST | `/groups/{group}/membership-requests` | Crear solicitud (`request_note` opcional, máx. 500) |
 | GET | `/me/membership-requests` | Listado paginado del solicitante |
 | DELETE | `/me/membership-requests/{request}` | Cancelar solicitud propia (solo `pending`) |
-| GET | `/groups/{group}/membership-requests` | Listado paginado para revisores autorizados |
+| GET | `/groups/{group}/membership-requests` | Listado paginado para revisores autorizados (`?status=` opcional: `pending`, `approved`, `rejected`, `cancelled`; sin filtro = historial completo) |
 | POST | `/membership-requests/{request}/approve` | Aprobar (`review_note` opcional) |
 | POST | `/membership-requests/{request}/reject` | Rechazar (`review_note` opcional) |
 
@@ -92,7 +110,7 @@ Rate limit en creación: `throttle:membership-requests` (config `red_vecinal.mem
 | 403 | Policy (revisor, junta suspendida, fuera de municipio, etc.) |
 | 404 | Recurso inexistente |
 | 409 | Conflicto: duplicado `pending`, ya miembro activo, `group_members.pending` Filament, re-aprobación |
-| 422 | Validación o cooldown de 7 días tras rechazo (`rejection_cooldown_days`) |
+| 422 | Validación, `status` inválido en listado de revisión, cooldown de 7 días tras rechazo (`rejection_cooldown_days`) |
 | 429 | Rate limit en POST de creación |
 
 El cliente **no** puede enviar `user_id` ni `municipality_id`; el servidor los resuelve desde la sesión y la junta.

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
+use App\Domains\Neighborhoods\Support\ReviewableNeighborhoodGroupsQuery;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\GroupMemberResource;
 use App\Http\Resources\Api\V1\NeighborhoodGroupResource;
@@ -37,6 +38,17 @@ class NeighborhoodGroupController extends Controller
         $group->load('municipality');
 
         return new NeighborhoodGroupResource($group);
+    }
+
+    public function reviewableGroups(Request $request): AnonymousResourceCollection
+    {
+        $groups = ReviewableNeighborhoodGroupsQuery::forUser($request->user())
+            ->with('municipality')
+            ->orderBy('name')
+            ->orderBy('id')
+            ->paginate();
+
+        return NeighborhoodGroupResource::collection($groups);
     }
 
     public function myGroups(Request $request): AnonymousResourceCollection
