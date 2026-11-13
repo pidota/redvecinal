@@ -53,6 +53,33 @@ void main() {
     );
   });
 
+  test('myRequests envía neighborhood_group_id cuando se proporciona', () async {
+  String? capturedQuery;
+    final repo = buildRepo(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.path.endsWith('/me/membership-requests')) {
+          capturedQuery = options.uri.query;
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'data': [],
+                'meta': {'current_page': 1, 'last_page': 1},
+              },
+            ),
+          );
+          return;
+        }
+        handler.next(options);
+      },
+    ));
+
+    await repo.myRequests(page: 2, neighborhoodGroupId: 42);
+    expect(capturedQuery, contains('page=2'));
+    expect(capturedQuery, contains('neighborhood_group_id=42'));
+  });
+
   test('422 muestra mensaje del servidor', () async {
     final repo = buildRepo(InterceptorsWrapper(
       onRequest: (options, handler) {

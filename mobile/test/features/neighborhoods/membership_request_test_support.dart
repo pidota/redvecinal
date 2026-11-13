@@ -46,6 +46,8 @@ class FakeMembershipRequestGateway implements MembershipRequestGateway {
     this.cancelFailure,
     this.submitCallCount = 0,
     this.myRequestsCallCount = 0,
+    this.myRequestsPagesByGroup,
+    this.lastMyRequestsGroupId,
     this.reviewableGroupsPage,
     this.reviewableGroupsPagesByNumber,
     this.reviewableGroupsFailure,
@@ -73,6 +75,8 @@ class FakeMembershipRequestGateway implements MembershipRequestGateway {
   Object? cancelFailure;
   int submitCallCount;
   int myRequestsCallCount;
+  Map<String, PaginatedMembershipRequests>? myRequestsPagesByGroup;
+  int? lastMyRequestsGroupId;
   PaginatedNeighborhoodGroups? reviewableGroupsPage;
   Map<int, PaginatedNeighborhoodGroups>? reviewableGroupsPagesByNumber;
   Object? reviewableGroupsFailure;
@@ -105,8 +109,9 @@ class FakeMembershipRequestGateway implements MembershipRequestGateway {
   }
 
   @override
-  Future<PaginatedMembershipRequests> myRequests({int page = 1}) async {
+  Future<PaginatedMembershipRequests> myRequests({int page = 1, int? neighborhoodGroupId}) async {
     myRequestsCallCount++;
+    lastMyRequestsGroupId = neighborhoodGroupId;
     if (myRequestsDelayMs > 0) {
       await Future<void>.delayed(Duration(milliseconds: myRequestsDelayMs));
     }
@@ -114,19 +119,43 @@ class FakeMembershipRequestGateway implements MembershipRequestGateway {
         (myRequestsFailurePage == null || myRequestsFailurePage == page)) {
       throw myRequestsFailure!;
     }
-    final byPage = myRequestsPagesByNumber;
-    if (byPage != null && byPage.containsKey(page)) {
-      return byPage[page]!;
+
+    if (neighborhoodGroupId != null) {
+      final byGroup = myRequestsPagesByGroup;
+      final groupKey = '$neighborhoodGroupId|$page';
+      if (byGroup != null && byGroup.containsKey(groupKey)) {
+        return byGroup[groupKey]!;
+      }
     }
 
-    return myRequestsPage ??
-        PaginatedMembershipRequests(
-          items: [
-            MembershipRequest.fromJson(sampleMembershipRequestJson()),
-          ],
-          currentPage: page,
-          lastPage: 1,
-        );
+    PaginatedMembershipRequests resolved;
+    final byPage = myRequestsPagesByNumber;
+    if (byPage != null && byPage.containsKey(page)) {
+      resolved = byPage[page]!;
+    } else {
+      resolved = myRequestsPage ??
+          PaginatedMembershipRequests(
+            items: [
+              MembershipRequest.fromJson(sampleMembershipRequestJson()),
+            ],
+            currentPage: page,
+            lastPage: 1,
+          );
+    }
+
+    if (neighborhoodGroupId == null) {
+      return resolved;
+    }
+
+    final filtered = resolved.items
+        .where((request) => request.neighborhoodGroupId == neighborhoodGroupId)
+        .toList(growable: false);
+
+    return PaginatedMembershipRequests(
+      items: filtered,
+      currentPage: resolved.currentPage,
+      lastPage: resolved.lastPage,
+    );
   }
 
   @override

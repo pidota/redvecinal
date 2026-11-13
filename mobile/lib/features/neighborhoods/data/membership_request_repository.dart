@@ -14,7 +14,7 @@ abstract class MembershipRequestGateway {
 
   Future<MembershipRequest> submit({required int groupId, String? requestNote});
 
-  Future<PaginatedMembershipRequests> myRequests({int page = 1});
+  Future<PaginatedMembershipRequests> myRequests({int page = 1, int? neighborhoodGroupId});
 
   Future<void> cancel(int requestId);
 
@@ -81,12 +81,15 @@ class MembershipRequestRepository implements MembershipRequestGateway {
   }
 
   @override
-  Future<PaginatedMembershipRequests> myRequests({int page = 1}) async {
+  Future<PaginatedMembershipRequests> myRequests({int page = 1, int? neighborhoodGroupId}) async {
     _ensureConfigured();
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '/me/membership-requests',
-        queryParameters: {'page': page},
+        queryParameters: {
+          'page': page,
+          if (neighborhoodGroupId != null) 'neighborhood_group_id': neighborhoodGroupId,
+        },
       );
 
       final payload = response.data;

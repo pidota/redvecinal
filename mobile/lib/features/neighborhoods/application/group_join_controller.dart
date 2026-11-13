@@ -102,22 +102,20 @@ class GroupJoinController extends AutoDisposeFamilyAsyncNotifier<GroupJoinViewDa
     return GroupJoinViewData(group: group, existingRequest: existing);
   }
 
-  /// Busca la solicitud más reciente del usuario para [groupId] recorriendo
-  /// el listado paginado real (`GET /me/membership-requests`) sin filtros.
+  /// Solicitud más reciente del usuario para [groupId] vía
+  /// `GET /me/membership-requests?neighborhood_group_id=`.
   Future<MembershipRequest?> _findExistingRequestForGroup(int groupId, int epoch) async {
     final repo = ref.read(membershipRequestRepositoryProvider);
     var page = 1;
 
     while (true) {
-      final batch = await repo.myRequests(page: page);
+      final batch = await repo.myRequests(page: page, neighborhoodGroupId: groupId);
       if (neighborhoodSessionEpoch(ref) != epoch) {
         throw StateError('Respuesta de sesión anterior');
       }
 
-      for (final request in batch.items) {
-        if (request.neighborhoodGroupId == groupId) {
-          return request;
-        }
+      if (batch.items.isNotEmpty) {
+        return batch.items.first;
       }
 
       if (!batch.hasMore) {

@@ -45,13 +45,20 @@ class MembershipRequestController extends Controller
 
     public function myIndex(Request $request): AnonymousResourceCollection
     {
-        $requests = NeighborhoodMembershipRequest::query()
+        $validated = $request->validate([
+            'neighborhood_group_id' => ['sometimes', 'integer', 'min:1'],
+        ]);
+
+        $query = NeighborhoodMembershipRequest::query()
             ->where('user_id', $request->user()->id)
             ->with(['neighborhoodGroup.municipality'])
-            ->orderByDesc('created_at')
-            ->paginate();
+            ->orderByDesc('created_at');
 
-        return MembershipRequestResource::collection($requests);
+        if (isset($validated['neighborhood_group_id'])) {
+            $query->where('neighborhood_group_id', $validated['neighborhood_group_id']);
+        }
+
+        return MembershipRequestResource::collection($query->paginate());
     }
 
     public function destroy(

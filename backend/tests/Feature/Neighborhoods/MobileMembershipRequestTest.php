@@ -405,6 +405,140 @@ class MobileMembershipRequestTest extends TestCase
             ->assertJsonStructure(['data', 'links', 'meta']);
     }
 
+    public function test_my_requests_filter_by_neighborhood_group_id(): void
+    {
+        [$anchorGroup, $vecino] = $this->vecinoWithGroup();
+        $targetA = NeighborhoodGroup::factory()->create(['municipality_id' => $anchorGroup->municipality_id]);
+        $targetB = NeighborhoodGroup::factory()->create(['municipality_id' => $anchorGroup->municipality_id]);
+
+        Sanctum::actingAs($vecino);
+        $idA = $this->postJson("/api/v1/groups/{$targetA->id}/membership-requests")->assertCreated()->json('data.id');
+        $this->postJson("/api/v1/groups/{$targetB->id}/membership-requests")->assertCreated();
+
+        $this->getJson("/api/v1/me/membership-requests?neighborhood_group_id={$targetA->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $idA)
+            ->assertJsonPath('data.0.neighborhood_group_id', $targetA->id);
+    }
+
+    public function test_my_requests_filter_returns_empty_when_no_requests_for_group(): void
+    {
+        [$anchorGroup, $vecino] = $this->vecinoWithGroup();
+        $emptyGroup = NeighborhoodGroup::factory()->create(['municipality_id' => $anchorGroup->municipality_id]);
+
+        Sanctum::actingAs($vecino);
+
+        $this->getJson("/api/v1/me/membership-requests?neighborhood_group_id={$emptyGroup->id}")
+            ->assertOk()
+            ->assertJsonPath('data', [])
+            ->assertJsonPath('meta.total', 0);
+    }
+
+    public function test_my_requests_filter_allows_nonexistent_group_id_with_empty_collection(): void
+    {
+        [, $vecino] = $this->vecinoWithGroup();
+
+        Sanctum::actingAs($vecino);
+
+        $this->getJson('/api/v1/me/membership-requests?neighborhood_group_id=999999')
+            ->assertOk()
+            ->assertJsonPath('data', []);
+    }
+
+    public function test_my_requests_filter_never_exposes_other_users_requests(): void
+    {
+        [$anchorGroup, $vecino] = $this->vecinoWithGroup();
+        $target = NeighborhoodGroup::factory()->create(['municipality_id' => $anchorGroup->municipality_id]);
+        $other = User::factory()->create();
+        $this->addMemberToGroup($anchorGroup, $other);
+
+        Sanctum::actingAs($other);
+        $this->postJson("/api/v1/groups/{$target->id}/membership-requests")->assertCreated();
+
+        Sanctum::actingAs($vecino);
+        $this->getJson("/api/v1/me/membership-requests?neighborhood_group_id={$target->id}")
+            ->assertOk()
+            ->assertJsonPath('data', []);
+    }
+
+    public function test_my_requests_filter_respects_municipalities(): void
+    {
+        $municipalityA = Municipality::factory()->create();
+        $municipalityB = Municipality::factory()->create();
+        $groupA = NeighborhoodGroup::factory()->create(['municipality_id' => $municipalityA->id]);
+        $groupB = NeighborhoodGroup::factory()->create(['municipality_id' => $municipalityB->id]);
+        $anchorA = NeighborhoodGroup::factory()->create(['municipality_id' => $municipalityA->id]);
+        $anchorB = NeighborhoodGroup::factory()->create(['municipality_id' => $municipalityB->id]);
+        $vecino = User::factory()->create();
+        $this->addMemberToGroup($anchorA, $vecino);
+        $this->addMemberToGroup($anchorB, $vecino);
+
+        $requestB = NeighborhoodMembershipRequest::factory()->create([
+            'neighborhood_group_id' => $groupB->id,
+            'user_id' => $vecino->id,
+            'municipality_id' => $municipalityB->id,
+            'status' => MembershipRequestStatus::Pending,
+        ]);
+        NeighborhoodMembershipRequest::factory()->create([
+            'neighborhood_group_id' => $groupA->id,
+            'user_id' => $vecino->id,
+            'municipality_id' => $municipalityA->id,
+            'status' => MembershipRequestStatus::Pending,
+        ]);
+
+        Sanctum::actingAs($vecino);
+
+        $this->getJson("/api/v1/me/membership-requests?neighborhood_group_id={$groupB->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $requestB->id);
+
+        $this->getJson("/api/v1/me/membership-requests?neighborhood_group_id={$groupA->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
+    public function test_my_requests_filter_rejects_malformed_group_id(): void
+    {
+        [, $vecino] = $this->vecinoWithGroup();
+
+        Sanctum::actingAs($vecino);
+
+        $this->getJson('/api/v1/me/membership-requests?neighborhood_group_id=abc')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['neighborhood_group_id']);
+    }
+
+    public function test_my_requests_filter_keeps_order_and_pagination(): void
+    {
+        [$anchorGroup, $vecino] = $this->vecinoWithGroup();
+        $target = NeighborhoodGroup::factory()->create(['municipality_id' => $anchorGroup->municipality_id]);
+
+        NeighborhoodMembershipRequest::factory()->create([
+            'neighborhood_group_id' => $target->id,
+            'user_id' => $vecino->id,
+            'municipality_id' => $target->municipality_id,
+            'status' => MembershipRequestStatus::Rejected,
+            'rejected_at' => now()->subDays(3),
+            'created_at' => now()->subDays(3),
+        ]);
+        $newer = NeighborhoodMembershipRequest::factory()->create([
+            'neighborhood_group_id' => $target->id,
+            'user_id' => $vecino->id,
+            'municipality_id' => $target->municipality_id,
+            'status' => MembershipRequestStatus::Pending,
+            'created_at' => now()->subHour(),
+        ]);
+
+        Sanctum::actingAs($vecino);
+
+        $this->getJson("/api/v1/me/membership-requests?neighborhood_group_id={$target->id}")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $newer->id)
+            ->assertJsonStructure(['data', 'links', 'meta']);
+    }
+
     public function test_unauthenticated_requests_return_401(): void
     {
         $group = NeighborhoodGroup::factory()->create();

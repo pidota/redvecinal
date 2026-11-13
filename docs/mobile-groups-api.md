@@ -94,7 +94,7 @@ Rate limit en creación: `throttle:membership-requests` (config `red_vecinal.mem
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | `/groups/{group}/membership-requests` | Crear solicitud (`request_note` opcional, máx. 500) |
-| GET | `/me/membership-requests` | Listado paginado del solicitante |
+| GET | `/me/membership-requests` | Listado paginado del solicitante (`?neighborhood_group_id=` opcional, entero ≥ 1) |
 | DELETE | `/me/membership-requests/{request}` | Cancelar solicitud propia (solo `pending`) |
 | GET | `/groups/{group}/membership-requests` | Listado paginado para revisores autorizados (`?status=` opcional: `pending`, `approved`, `rejected`, `cancelled`; sin filtro = historial completo) |
 | POST | `/membership-requests/{request}/approve` | Aprobar (`review_note` opcional) |
@@ -114,6 +114,28 @@ Rate limit en creación: `throttle:membership-requests` (config `red_vecinal.mem
 | 429 | Rate limit en POST de creación |
 
 El cliente **no** puede enviar `user_id` ni `municipality_id`; el servidor los resuelve desde la sesión y la junta.
+
+### Filtro `neighborhood_group_id` en «Mis solicitudes»
+
+Parámetro de consulta **opcional** en `GET /me/membership-requests`:
+
+| Parámetro | Tipo | Comportamiento |
+|-----------|------|----------------|
+| `neighborhood_group_id` | Entero ≥ 1 | Restringe el listado a solicitudes del usuario autenticado para esa junta |
+
+- Sin parámetro: mismo comportamiento que antes (todas las solicitudes del usuario, paginadas por `created_at` descendente).
+- Con parámetro válido: **200** con `data` vacío si no hay filas para ese usuario y junta (la junta puede no existir o no tener solicitudes propias).
+- Valores malformados (`abc`, `0`, negativos): **422** con error de validación.
+- **Seguridad:** siempre `user_id =` usuario Sanctum; nunca expone solicitudes de otros vecinos.
+- No exige ser miembro de la junta para consultar el propio historial.
+- Orden y paginación (`page`, `meta`, `links`) se conservan.
+
+Ejemplo:
+
+```http
+GET /api/v1/me/membership-requests?neighborhood_group_id=12&page=1
+Authorization: Bearer …
+```
 
 ### Motor de base de datos
 
