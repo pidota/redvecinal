@@ -1,0 +1,183 @@
+name: Backend tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  COMPOSER_CACHE_DIR: /tmp/composer-cache
+
+jobs:
+  sqlite:
+    name: SQLite (phpunit.xml)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      APP_ENV: testing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, xml, ctype, json, tokenizer, bcmath, intl, pdo_sqlite, pdo_mysql, curl, zip, fileinfo
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.COMPOSER_CACHE_DIR }}
+          key: composer-cache-${{ runner.os }}-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: |
+            composer-cache-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare application key
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force --ansi
+
+      - name: Assert testing application key
+        run: |
+          set -euo pipefail
+          php -r "
+          require 'vendor/autoload.php';
+          \$app = require 'bootstrap/app.php';
+          \$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+          \$key = (string) config('app.key');
+          if (\$key === '' || ! str_starts_with(\$key, 'base64:')) {
+              fwrite(STDERR, 'APP_KEY inválida para testing.'.PHP_EOL);
+              exit(1);
+          }
+          echo 'app_key_ok'.PHP_EOL;
+          "
+
+      - name: Run SQLite test suite
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ":memory:"
+        run: |
+          php artisan config:clear --ansi
+          php artisan test --ansi
+
+  mysql:
+    name: MySQL 8.4 (phpunit.mysql.xml)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: red_vecinal_testing
+      DB_USERNAME: root
+      DB_PASSWORD: ci_mysql_testing
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci_mysql_testing
+          MYSQL_DATABASE: red_vecinal_testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_mysql_testing"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=30s
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, xml, ctype, json, tokenizer, bcmath, intl, pdo_mysql, curl, zip, fileinfo
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.COMPOSER_CACHE_DIR }}
+          key: composer-cache-${{ runner.os }}-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: |
+            composer-cache-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare application key
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force --ansi
+
+      - name: Assert CI database safety (environment)
+        run: |
+          set -euo pipefail
+          test "${APP_ENV}" = "testing"
+          test "${DB_DATABASE}" = "red_vecinal_testing"
+          test "${DB_HOST}" = "127.0.0.1"
+          test "${DB_CONNECTION}" = "mysql"
+
+      - name: Assert Laravel effective MySQL config
+        run: |
+          set -euo pipefail
+          php artisan config:clear --ansi
+          php -r "
+          require 'vendor/autoload.php';
+          \$app = require 'bootstrap/app.php';
+          \$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+          \$key = (string) config('app.key');
+          if (\$key === '' || ! str_starts_with(\$key, 'base64:')) {
+              fwrite(STDERR, 'APP_KEY inválida para testing.'.PHP_EOL);
+              exit(1);
+          }
+          if ((string) config('app.env') !== 'testing') {
+              fwrite(STDERR, 'APP_ENV efectivo distinto de testing.'.PHP_EOL);
+              exit(1);
+          }
+          \$mysql = config('database.connections.mysql');
+          if ((\$mysql['driver'] ?? null) !== 'mysql') {
+              fwrite(STDERR, 'Driver MySQL efectivo incorrecto.'.PHP_EOL);
+              exit(1);
+          }
+          if ((\$mysql['host'] ?? null) !== '127.0.0.1') {
+              fwrite(STDERR, 'DB host efectivo incorrecto.'.PHP_EOL);
+              exit(1);
+          }
+          if ((\$mysql['database'] ?? null) !== 'red_vecinal_testing') {
+              fwrite(STDERR, 'Base de datos efectiva incorrecta.'.PHP_EOL);
+              exit(1);
+          }
+          echo 'laravel_mysql_config_ok'.PHP_EOL;
+          "
+
+      - name: Run MySQL test suite
+        run: |
+          php artisan config:clear --ansi
+          php artisan test -c phpunit.mysql.xml --ansi

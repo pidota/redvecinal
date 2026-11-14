@@ -103,6 +103,15 @@ Producción/VPS: **no** modificar en esta fase; ver `docs/chat-tiempo-real.md`.
 
 Guía paso a paso Reverb + E2E WebSocket: [reverb-desarrollo-local.md](reverb-desarrollo-local.md).
 
+## Pruebas automatizadas (CI)
+
+GitHub Actions ejecuta las suites backend en cada push/PR a `main`. Detalle: [ci-backend-tests.md](ci-backend-tests.md).
+
+- **SQLite:** regresión general (`php artisan test`).
+- **MySQL 8.4:** vecindarios, smoke y concurrencia (`php artisan test -c phpunit.mysql.xml` contra `red_vecinal_testing`).
+
+CI **no** usa la base `red_vecinal` ni el servidor del VPS.
+
 ## Comandos de validación (Fase 1)
 
 ```powershell
