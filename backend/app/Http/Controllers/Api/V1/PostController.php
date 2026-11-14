@@ -17,6 +17,7 @@ use App\Domains\Posts\Services\SubmitPostService;
 use App\Domains\Posts\Services\UpdatePostRevisionService;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\PostResource;
+use App\Http\Support\EagerLoadsPostsForApi;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -30,8 +31,8 @@ class PostController extends Controller
 
         $user = $request->user();
         $query = Post::query()
-            ->with(['currentPublishedRevision', 'pendingRevision'])
             ->where('status', PostStatus::Published);
+        EagerLoadsPostsForApi::applyToQuery($query, $user);
 
         if (! $user->isSuperAdmin()) {
             $municipalityIds = $user->groupMemberships()->where('status', 'active')->pluck('municipality_id')->unique();
@@ -62,7 +63,7 @@ class PostController extends Controller
             abort(404);
         }
 
-        $post->load(['currentPublishedRevision', 'pendingRevision']);
+        EagerLoadsPostsForApi::loadOntoModel($post, $request->user());
 
         return new PostResource($post);
     }
@@ -102,7 +103,7 @@ class PostController extends Controller
             );
         }
 
-        $post->load(['currentPublishedRevision', 'revisions']);
+        EagerLoadsPostsForApi::loadOntoModel($post, $request->user());
 
         return new PostResource($post);
     }
@@ -118,7 +119,8 @@ class PostController extends Controller
         ]);
 
         $update->execute($post, $request->user(), $data['category_id'], $data['title'], $data['body']);
-        $post->refresh()->load(['currentPublishedRevision', 'pendingRevision', 'revisions']);
+        $post->refresh();
+        EagerLoadsPostsForApi::loadOntoModel($post, $request->user());
 
         return new PostResource($post);
     }
@@ -127,7 +129,8 @@ class PostController extends Controller
     {
         $this->authorize('submit', $post);
         $submit->execute($post, $request->user());
-        $post->refresh()->load(['currentPublishedRevision', 'pendingRevision']);
+        $post->refresh();
+        EagerLoadsPostsForApi::loadOntoModel($post, $request->user());
 
         return new PostResource($post);
     }
@@ -136,7 +139,8 @@ class PostController extends Controller
     {
         $this->authorize('approve', $post);
         $approve->execute($post, $request->user());
-        $post->refresh()->load(['currentPublishedRevision', 'pendingRevision']);
+        $post->refresh();
+        EagerLoadsPostsForApi::loadOntoModel($post, $request->user());
 
         return new PostResource($post);
     }
@@ -150,7 +154,8 @@ class PostController extends Controller
         ]);
 
         $reject->execute($post, $request->user(), $data['rejection_reason']);
-        $post->refresh()->load(['currentPublishedRevision', 'pendingRevision']);
+        $post->refresh();
+        EagerLoadsPostsForApi::loadOntoModel($post, $request->user());
 
         return new PostResource($post);
     }
@@ -160,7 +165,8 @@ class PostController extends Controller
         $this->authorize('hide', $post);
         $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
         $hide->execute($post, $request->user(), $data['reason'] ?? null);
-        $post->refresh()->load(['currentPublishedRevision']);
+        $post->refresh();
+        EagerLoadsPostsForApi::loadOntoModel($post, $request->user());
 
         return new PostResource($post);
     }
@@ -169,7 +175,8 @@ class PostController extends Controller
     {
         $this->authorize('restore', $post);
         $restore->execute($post, $request->user());
-        $post->refresh()->load(['currentPublishedRevision']);
+        $post->refresh();
+        EagerLoadsPostsForApi::loadOntoModel($post, $request->user());
 
         return new PostResource($post);
     }
@@ -179,17 +186,19 @@ class PostController extends Controller
         $this->authorize('archive', $post);
         $archive->execute($post, $request->user());
         $post->refresh();
+        EagerLoadsPostsForApi::loadOntoModel($post, $request->user());
 
         return new PostResource($post);
     }
 
     public function mine(Request $request): AnonymousResourceCollection
     {
-        $posts = Post::query()
-            ->with(['currentPublishedRevision', 'pendingRevision'])
-            ->where('author_id', $request->user()->id)
-            ->orderByDesc('updated_at')
-            ->paginate();
+        $user = $request->user();
+        $query = Post::query()
+            ->where('author_id', $user->id)
+            ->orderByDesc('updated_at');
+        EagerLoadsPostsForApi::applyToQuery($query, $user);
+        $posts = $query->paginate();
 
         return PostResource::collection($posts);
     }
@@ -213,9 +222,10 @@ class PostController extends Controller
             abort(403);
         }
 
-        $posts = Post::query()
-            ->with(['pendingRevision', 'currentPublishedRevision', 'author'])
-            ->where('neighborhood_group_id', $group->id)
+        $query = Post::query()
+            ->where('neighborhood_group_id', $group->id);
+        EagerLoadsPostsForApi::applyToQuery($query, $user);
+        $posts = $query
             ->where(function ($query) {
                 $query->where('status', PostStatus::Pending)
                     ->orWhereHas('pendingRevision');

@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\ChatMessageController;
 use App\Http\Controllers\Api\V1\ChatRoomController;
 use App\Http\Controllers\Api\V1\MembershipRequestController;
 use App\Http\Controllers\Api\V1\NeighborhoodGroupController;
+use App\Http\Controllers\Api\V1\PostCategoryController;
 use App\Http\Controllers\Api\V1\PostAttachmentController;
 use App\Http\Controllers\Api\V1\PostCommentController;
 use App\Http\Controllers\Api\V1\PostController;
@@ -42,6 +43,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/membership-requests/{membershipRequest}/approve', [MembershipRequestController::class, 'approve']);
     Route::post('/membership-requests/{membershipRequest}/reject', [MembershipRequestController::class, 'reject']);
+
+    Route::get('/post-categories', [PostCategoryController::class, 'index']);
 
     Route::get('/posts', [PostController::class, 'index']);
     Route::get('/me/posts', [PostController::class, 'mine']);
