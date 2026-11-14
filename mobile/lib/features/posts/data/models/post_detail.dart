@@ -175,6 +175,23 @@ class PostDetail {
 
   bool get isPublished => status == 'published';
 
+  PostDetail copyWithEngagement(FeedPostEngagement engagement) {
+    return PostDetail(
+      id: id,
+      postKind: postKind,
+      status: status,
+      publishedAt: publishedAt,
+      author: author,
+      neighborhoodGroup: neighborhoodGroup,
+      municipality: municipality,
+      category: category,
+      content: content,
+      engagement: engagement,
+      attachments: attachments,
+      commentsEnabled: commentsEnabled,
+    );
+  }
+
   String get scopeLabel {
     if (isMunicipal) {
       return municipality?.name ?? 'Comunicado municipal';

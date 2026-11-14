@@ -113,6 +113,22 @@ class FeedPostEngagement {
   final int commentsCount;
   final int reactionsCount;
   final String? myReactionType;
+
+  bool get hasLike => myReactionType == 'like';
+
+  FeedPostEngagement copyWith({
+    int? commentsCount,
+    int? reactionsCount,
+    String? myReactionType,
+    bool clearMyReaction = false,
+  }) {
+    return FeedPostEngagement(
+      commentsCount: commentsCount ?? this.commentsCount,
+      reactionsCount: reactionsCount ?? this.reactionsCount,
+      myReactionType:
+          clearMyReaction ? null : (myReactionType ?? this.myReactionType),
+    );
+  }
 }
 
 class FeedPostAttachmentMeta {

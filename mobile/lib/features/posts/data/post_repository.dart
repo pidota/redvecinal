@@ -9,6 +9,7 @@ import 'models/paginated_feed_posts.dart';
 import 'models/paginated_post_comments.dart';
 import 'models/post_comment.dart';
 import 'models/post_detail.dart';
+import 'models/post_reaction.dart';
 
 abstract class PostGateway {
   Future<PaginatedFeedPosts> listPosts({
@@ -33,6 +34,13 @@ abstract class PostGateway {
     required int postId,
     required String body,
   });
+
+  Future<PostReactionRecord> setReaction({
+    required int postId,
+    String type = 'like',
+  });
+
+  Future<bool> removeReaction({required int postId});
 }
 
 final postRepositoryProvider = Provider<PostGateway>((ref) {
@@ -239,6 +247,56 @@ class PostRepository implements PostGateway {
         .whereType<Map<String, dynamic>>()
         .map(PostComment.fromJson)
         .toList();
+  }
+
+  @override
+  Future<PostReactionRecord> setReaction({
+    required int postId,
+    String type = 'like',
+  }) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.put<Map<String, dynamic>>(
+        '/posts/$postId/reactions',
+        data: {'type': type},
+      );
+
+      final payload = response.data;
+      if (response.statusCode == 200 && payload != null) {
+        return PostReactionRecord.fromJson(payload);
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<bool> removeReaction({required int postId}) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.delete<Map<String, dynamic>>(
+        '/posts/$postId/reactions',
+      );
+
+      final payload = response.data;
+      if (response.statusCode == 200 && payload != null) {
+        return payload['deleted'] == true;
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
   }
 
   void _ensureConfigured() {

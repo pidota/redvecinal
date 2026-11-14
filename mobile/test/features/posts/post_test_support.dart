@@ -3,6 +3,7 @@ import 'package:red_vecinal/features/posts/data/models/paginated_feed_posts.dart
 import 'package:red_vecinal/features/posts/data/models/paginated_post_comments.dart';
 import 'package:red_vecinal/features/posts/data/models/post_comment.dart';
 import 'package:red_vecinal/features/posts/data/models/post_detail.dart';
+import 'package:red_vecinal/features/posts/data/models/post_reaction.dart';
 import 'package:red_vecinal/features/posts/data/post_repository.dart';
 
 Map<String, dynamic> sampleCommunityPostJson({
@@ -119,7 +120,11 @@ Map<String, dynamic> sampleCommentJson({
 
 PostComment sampleComment({int id = 100, int postId = 1, String? body}) =>
     PostComment.fromJson(
-      sampleCommentJson(id: id, postId: postId, body: body ?? 'Gracias por el aviso.'),
+      sampleCommentJson(
+        id: id,
+        postId: postId,
+        body: body ?? 'Gracias por el aviso.',
+      ),
     );
 
 PaginatedPostComments sampleCommentsPage({
@@ -155,6 +160,11 @@ class FakePostGateway implements PostGateway {
     this.createCommentDelayMs = 0,
     this.createdCommentByPostId,
     this.commentPagesByPostId,
+    this.setReactionFailureByPostId,
+    this.removeReactionFailureByPostId,
+    this.reactionDelayMs = 0,
+    this.onSetReaction,
+    this.onRemoveReaction,
   }) : feedPage =
            feedPage ??
            PaginatedFeedPosts(
@@ -182,11 +192,18 @@ class FakePostGateway implements PostGateway {
   int createCommentDelayMs;
   Map<int, PostComment Function(String body)>? createdCommentByPostId;
   Map<int, Map<int, PaginatedPostComments>>? commentPagesByPostId;
+  Map<int, Object?>? setReactionFailureByPostId;
+  Map<int, Object?>? removeReactionFailureByPostId;
+  int reactionDelayMs;
+  void Function(int postId, String type)? onSetReaction;
+  void Function(int postId)? onRemoveReaction;
 
   int detailCallCount = 0;
   int downloadCallCount = 0;
   int listCommentsCallCount = 0;
   int createCommentCallCount = 0;
+  int setReactionCallCount = 0;
+  int removeReactionCallCount = 0;
   final List<String> createCommentBodies = [];
 
   @override
@@ -320,4 +337,49 @@ class FakePostGateway implements PostGateway {
       ),
     });
   }
+
+  @override
+  Future<PostReactionRecord> setReaction({
+    required int postId,
+    String type = 'like',
+  }) async {
+    setReactionCallCount++;
+    if (reactionDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: reactionDelayMs));
+    }
+    final failure = setReactionFailureByPostId?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    onSetReaction?.call(postId, type);
+    return PostReactionRecord(id: 50, postId: postId, type: type);
+  }
+
+  @override
+  Future<bool> removeReaction({required int postId}) async {
+    removeReactionCallCount++;
+    if (reactionDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: reactionDelayMs));
+    }
+    final failure = removeReactionFailureByPostId?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    onRemoveReaction?.call(postId);
+    return true;
+  }
+}
+
+PostDetail detailWithEngagement({
+  required int id,
+  int reactionsCount = 0,
+  String? myReactionType,
+}) {
+  final json = Map<String, dynamic>.from(sampleCommunityPostJson(id: id));
+  json['engagement'] = {
+    'comments_count': 0,
+    'reactions_count': reactionsCount,
+    'my_reaction': myReactionType == null ? null : {'type': myReactionType},
+  };
+  return PostDetail.fromJson(json);
 }

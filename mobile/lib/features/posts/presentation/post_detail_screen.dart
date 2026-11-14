@@ -13,6 +13,7 @@ import '../data/models/post_detail.dart';
 import 'widgets/post_attachment_list.dart';
 import 'widgets/post_comments_section.dart';
 import 'widgets/post_detail_body.dart';
+import 'widgets/post_reaction_control.dart';
 
 class PostDetailScreen extends ConsumerWidget {
   const PostDetailScreen({required this.postId, super.key});
@@ -151,12 +152,7 @@ class _PostDetailContent extends ConsumerWidget {
                     color: theme.colorScheme.primary,
                   ),
                   Text('${detail.engagement.commentsCount} comentarios'),
-                  Icon(
-                    Icons.favorite_border,
-                    size: 18,
-                    color: theme.colorScheme.primary,
-                  ),
-                  Text('${detail.engagement.reactionsCount} reacciones'),
+                  PostReactionControl(postId: postId, detail: detail),
                 ],
               ),
             ],
