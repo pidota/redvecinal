@@ -1,3 +1,4 @@
+import 'package:red_vecinal/core/network/api_failure.dart';
 import 'package:red_vecinal/features/posts/data/models/feed_post.dart';
 import 'package:red_vecinal/features/posts/data/models/paginated_feed_posts.dart';
 import 'package:red_vecinal/features/posts/data/models/paginated_post_comments.dart';
@@ -127,6 +128,23 @@ PostComment sampleComment({int id = 100, int postId = 1, String? body}) =>
       ),
     );
 
+PostComment sampleCommentChronological({
+  required int id,
+  int postId = 1,
+  required String createdAt,
+  String? body,
+}) {
+  return PostComment.fromJson({
+    ...sampleCommentJson(
+      id: id,
+      postId: postId,
+      body: body ?? 'Comentario $id',
+    ),
+    'created_at': createdAt,
+    'updated_at': createdAt,
+  });
+}
+
 PaginatedPostComments sampleCommentsPage({
   List<PostComment>? items,
   int currentPage = 1,
@@ -149,6 +167,7 @@ class FakePostGateway implements PostGateway {
     this.callCount = 0,
     this.detailById,
     this.detailFailureById,
+    this.detailFailureAfterCalls,
     this.detailDelayMs = 0,
     this.attachmentBytesById,
     this.downloadFailure,
@@ -165,6 +184,7 @@ class FakePostGateway implements PostGateway {
     this.reactionDelayMs = 0,
     this.onSetReaction,
     this.onRemoveReaction,
+    this.onCreateComment,
   }) : feedPage =
            feedPage ??
            PaginatedFeedPosts(
@@ -181,6 +201,7 @@ class FakePostGateway implements PostGateway {
   int callCount;
   Map<int, PostDetail>? detailById;
   Map<int, Object?>? detailFailureById;
+  int? detailFailureAfterCalls;
   int detailDelayMs;
   Map<int, List<int>>? attachmentBytesById;
   Object? downloadFailure;
@@ -197,6 +218,7 @@ class FakePostGateway implements PostGateway {
   int reactionDelayMs;
   void Function(int postId, String type)? onSetReaction;
   void Function(int postId)? onRemoveReaction;
+  void Function(int postId, String body)? onCreateComment;
 
   int detailCallCount = 0;
   int downloadCallCount = 0;
@@ -243,6 +265,10 @@ class FakePostGateway implements PostGateway {
     detailCallCount++;
     if (detailDelayMs > 0) {
       await Future<void>.delayed(Duration(milliseconds: detailDelayMs));
+    }
+    if (detailFailureAfterCalls != null &&
+        detailCallCount > detailFailureAfterCalls!) {
+      throw const ApiNetworkFailure();
     }
     final failure = detailFailureById?[postId];
     if (failure != null) {
@@ -325,6 +351,7 @@ class FakePostGateway implements PostGateway {
     if (failure != null) {
       throw failure;
     }
+    onCreateComment?.call(postId, body);
     final factory = createdCommentByPostId?[postId];
     if (factory != null) {
       return factory(body);

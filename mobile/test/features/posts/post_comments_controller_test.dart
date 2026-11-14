@@ -9,6 +9,7 @@ import 'package:red_vecinal/features/auth/domain/auth_state.dart';
 import 'package:red_vecinal/features/posts/application/feed_controller.dart';
 import 'package:red_vecinal/features/posts/application/post_comments_controller.dart';
 import 'package:red_vecinal/features/posts/application/post_detail_controller.dart';
+import 'package:red_vecinal/features/posts/data/models/post_comment.dart';
 import 'package:red_vecinal/features/posts/data/models/paginated_post_comments.dart';
 import 'package:red_vecinal/features/posts/data/post_repository.dart';
 
@@ -150,11 +151,7 @@ void main() {
   test('logout durante POST no aplica comentario', () async {
     final gateway = FakePostGateway(
       commentsByPostId: {
-        1: const PaginatedPostComments(
-          items: [],
-          currentPage: 1,
-          lastPage: 1,
-        ),
+        1: const PaginatedPostComments(items: [], currentPage: 1, lastPage: 1),
       },
       createCommentDelayMs: 80,
     );
@@ -215,6 +212,60 @@ void main() {
           c.read(feedControllerProvider).hasValue,
       isTrue,
     );
+  });
+
+  test('POST página 1 y loadMore preservan orden cronológico', () async {
+    final pageOne = List<PostComment>.generate(
+      15,
+      (i) => sampleCommentChronological(
+        id: i + 1,
+        createdAt: '2026-11-14T10:${(i).toString().padLeft(2, '0')}:00Z',
+      ),
+    );
+    final pageTwo = List<PostComment>.generate(
+      15,
+      (i) => sampleCommentChronological(
+        id: i + 16,
+        createdAt: '2026-11-14T11:${(i).toString().padLeft(2, '0')}:00Z',
+      ),
+    );
+    final gateway = FakePostGateway(
+      commentPagesByPostId: {
+        1: {
+          1: PaginatedPostComments(items: pageOne, currentPage: 1, lastPage: 2),
+          2: PaginatedPostComments(items: pageTwo, currentPage: 2, lastPage: 2),
+        },
+      },
+      createdCommentByPostId: {
+        1:
+            (body) => sampleCommentChronological(
+              id: 500,
+              body: body,
+              createdAt: '2026-11-14T12:00:00Z',
+            ),
+      },
+    );
+    final c = container(gateway);
+    addTearDown(c.dispose);
+    c.listen(postDetailControllerProvider(1), (_, __) {});
+
+    await c.read(postCommentsControllerProvider(1).future);
+    final page0 = c.read(postCommentsControllerProvider(1)).value!;
+    expect(page0.hasMore, isTrue);
+    expect(page0.items.length, 15);
+
+    await c
+        .read(postCommentsControllerProvider(1).notifier)
+        .submitComment('Último');
+    await c.read(postCommentsControllerProvider(1).notifier).loadMore();
+
+    final merged = c.read(postCommentsControllerProvider(1)).value!;
+    expect(merged.items.map((e) => e.id).toList(), [
+      for (var i = 1; i <= 15; i++) i,
+      for (var i = 16; i <= 30; i++) i,
+      500,
+    ]);
+    expect(merged.items.map((e) => e.id).toSet().length, merged.items.length);
   });
 
   test('POST fallido no cambia conteo de comentarios en lista', () async {

@@ -169,6 +169,140 @@ void main() {
   });
 
   test(
+    'PUT tardío de sesión anterior no pisa detalle del usuario nuevo',
+    () async {
+      final details = {
+        1: detailWithEngagement(id: 1, reactionsCount: 0, myReactionType: null),
+      };
+      final gateway = FakePostGateway(
+        detailById: details,
+        reactionDelayMs: 120,
+        onSetReaction: (id, _) {
+          details[id] = detailWithEngagement(
+            id: id,
+            reactionsCount: 9,
+            myReactionType: 'like',
+          );
+        },
+      );
+      final c = container(gateway);
+      addTearDown(c.dispose);
+
+      c.read(authControllerProvider.notifier).state = AuthAuthenticated(
+        sampleAuthUser(id: 1),
+      );
+      var staleResponseLeftDetailStateless = false;
+      var trackingStaleImpact = false;
+      c.listen(postDetailControllerProvider(1), (_, next) {
+        if (!trackingStaleImpact) {
+          return;
+        }
+        if (next.isLoading && next.valueOrNull == null) {
+          staleResponseLeftDetailStateless = true;
+        }
+      });
+      await c.read(postDetailControllerProvider(1).future);
+      final op =
+          c.read(postDetailControllerProvider(1).notifier).setLikeReaction();
+
+      await c.read(authControllerProvider.notifier).logout(localOnly: true);
+      c.read(authControllerProvider.notifier).state = AuthAuthenticated(
+        sampleAuthUser(id: 99, email: 'nuevo@test.com'),
+      );
+      details[1] = detailWithEngagement(
+        id: 1,
+        reactionsCount: 2,
+        myReactionType: null,
+      );
+      await c.read(postDetailControllerProvider(1).future);
+
+      final detailCallsBeforeStale = gateway.detailCallCount;
+      final beforeStale = c.read(postDetailControllerProvider(1));
+      expect(beforeStale.hasValue, isTrue);
+      expect(beforeStale.value!.engagement.reactionsCount, 2);
+
+      trackingStaleImpact = true;
+      await op;
+
+      final afterStale = c.read(postDetailControllerProvider(1));
+      expect(staleResponseLeftDetailStateless, isFalse);
+      expect(afterStale.hasValue, isTrue);
+      expect(afterStale.isLoading, isFalse);
+      expect(afterStale.value!.engagement.reactionsCount, 2);
+      expect(afterStale.value!.engagement.hasLike, isFalse);
+      expect(gateway.detailCallCount, detailCallsBeforeStale);
+      expect(gateway.setReactionCallCount, 1);
+    },
+  );
+
+  test(
+    'DELETE tardío de sesión anterior no pisa detalle del usuario nuevo',
+    () async {
+      final details = {
+        1: detailWithEngagement(
+          id: 1,
+          reactionsCount: 1,
+          myReactionType: 'like',
+        ),
+      };
+      final gateway = FakePostGateway(
+        detailById: details,
+        reactionDelayMs: 120,
+        onRemoveReaction: (id) {
+          details[id] = detailWithEngagement(id: id, reactionsCount: 0);
+        },
+      );
+      final c = container(gateway);
+      addTearDown(c.dispose);
+
+      c.read(authControllerProvider.notifier).state = AuthAuthenticated(
+        sampleAuthUser(id: 1),
+      );
+      var staleResponseLeftDetailStateless = false;
+      var trackingStaleImpact = false;
+      c.listen(postDetailControllerProvider(1), (_, next) {
+        if (!trackingStaleImpact) {
+          return;
+        }
+        if (next.isLoading && next.valueOrNull == null) {
+          staleResponseLeftDetailStateless = true;
+        }
+      });
+      await c.read(postDetailControllerProvider(1).future);
+      final op =
+          c.read(postDetailControllerProvider(1).notifier).removeLikeReaction();
+
+      await c.read(authControllerProvider.notifier).logout(localOnly: true);
+      c.read(authControllerProvider.notifier).state = AuthAuthenticated(
+        sampleAuthUser(id: 2, email: 'nuevo@test.com'),
+      );
+      details[1] = detailWithEngagement(
+        id: 1,
+        reactionsCount: 4,
+        myReactionType: null,
+      );
+      await c.read(postDetailControllerProvider(1).future);
+
+      final detailCallsBeforeStale = gateway.detailCallCount;
+      final beforeStale = c.read(postDetailControllerProvider(1));
+      expect(beforeStale.hasValue, isTrue);
+      expect(beforeStale.value!.engagement.reactionsCount, 4);
+
+      trackingStaleImpact = true;
+      await op;
+
+      final afterStale = c.read(postDetailControllerProvider(1));
+      expect(staleResponseLeftDetailStateless, isFalse);
+      expect(afterStale.hasValue, isTrue);
+      expect(afterStale.isLoading, isFalse);
+      expect(afterStale.value!.engagement.reactionsCount, 4);
+      expect(afterStale.value!.engagement.hasLike, isFalse);
+      expect(gateway.detailCallCount, detailCallsBeforeStale);
+      expect(gateway.removeReactionCallCount, 1);
+    },
+  );
+
+  test(
     'respuesta tardía tras cambio de usuario no restaura snapshot previo',
     () async {
       final details = {
@@ -227,25 +361,44 @@ void main() {
     expect(gateway.setReactionCallCount, 1);
   });
 
-  test('logout durante DELETE restaura estado previo', () async {
+  test('logout durante DELETE no deja like de sesión anterior en UI', () async {
+    final details = {
+      1: detailWithEngagement(id: 1, myReactionType: 'like', reactionsCount: 1),
+    };
     final gateway = FakePostGateway(
-      detailById: {
-        1: detailWithEngagement(
-          id: 1,
-          myReactionType: 'like',
-          reactionsCount: 1,
-        ),
-      },
+      detailById: details,
       reactionDelayMs: 80,
+      onRemoveReaction: (id) {
+        details[id] = detailWithEngagement(id: id, reactionsCount: 0);
+      },
     );
     final c = container(gateway);
     addTearDown(c.dispose);
 
+    c.read(authControllerProvider.notifier).state = AuthAuthenticated(
+      sampleAuthUser(id: 1),
+    );
+    final sub = c.listen(postDetailControllerProvider(1), (_, __) {});
     await c.read(postDetailControllerProvider(1).future);
+
     final op =
         c.read(postDetailControllerProvider(1).notifier).removeLikeReaction();
     await c.read(authControllerProvider.notifier).logout(localOnly: true);
+    c.read(authControllerProvider.notifier).state = AuthAuthenticated(
+      sampleAuthUser(id: 2, email: 'nuevo@test.com'),
+    );
+    details[1] = detailWithEngagement(
+      id: 1,
+      reactionsCount: 4,
+      myReactionType: null,
+    );
+    await c.read(postDetailControllerProvider(1).future);
     await op;
+    sub.close();
+
+    final detail = c.read(postDetailControllerProvider(1)).valueOrNull;
+    expect(detail?.engagement.hasLike, isFalse);
+    expect(detail?.engagement.reactionsCount, 4);
     expect(gateway.removeReactionCallCount, 1);
   });
 

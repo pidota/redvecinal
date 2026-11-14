@@ -36,12 +36,63 @@ class PostDetailController
     }
 
     final generation = ++_loadGeneration;
-    state = const AsyncValue.loading();
+    final previous = state.valueOrNull;
+    if (previous == null) {
+      state = const AsyncValue.loading();
+    }
     final next = await AsyncValue.guard(() => _load(arg, epoch));
     if (generation != _loadGeneration) {
       return;
     }
+    if (!next.hasValue) {
+      state = next;
+      return;
+    }
+    final detail = next.value!;
+    if (previous != null && _reactionInFlight) {
+      state = AsyncValue.data(
+        detail.copyWithEngagement(
+          _engagementPreservingReaction(previous.engagement, detail.engagement),
+        ),
+      );
+      return;
+    }
     state = next;
+  }
+
+  /// Actualiza contadores sin vaciar el detalle ni pisar reacción optimista (H-02/H-03).
+  Future<void> syncEngagementAfterComment({required int epoch}) async {
+    final current = state.valueOrNull;
+    if (current == null || neighborhoodSessionEpoch(ref) != epoch) {
+      return;
+    }
+
+    final syncGeneration = ++_loadGeneration;
+    try {
+      final detail = await ref.read(postRepositoryProvider).getPost(arg);
+      if (neighborhoodSessionEpoch(ref) != epoch ||
+          syncGeneration != _loadGeneration) {
+        return;
+      }
+      final engagement = _engagementPreservingReaction(
+        current.engagement,
+        detail.engagement,
+      );
+      state = AsyncValue.data(current.copyWithEngagement(engagement));
+    } catch (_) {
+      if (neighborhoodSessionEpoch(ref) != epoch ||
+          syncGeneration != _loadGeneration) {
+        return;
+      }
+      final bumped = current.engagement.copyWith(
+        commentsCount: current.engagement.commentsCount + 1,
+      );
+      state = AsyncValue.data(current.copyWithEngagement(bumped));
+    }
+
+    if (neighborhoodSessionEpoch(ref) == epoch) {
+      ref.invalidate(feedControllerProvider);
+    }
   }
 
   Future<PostAttachmentDownloadResult> downloadAttachment(
@@ -167,7 +218,7 @@ class PostDetailController
 
       if (neighborhoodSessionEpoch(ref) != epoch ||
           reactionGeneration != _reactionGeneration) {
-        // No restaurar `previous`: podría sobrescribir el detalle del usuario nuevo.
+        // No restaurar `previous` ni mutar estado: la sesión vigente ya es fuente de verdad.
         return null;
       }
 
@@ -221,6 +272,20 @@ class PostDetailController
     if (neighborhoodSessionEpoch(ref) == epoch) {
       ref.invalidate(feedControllerProvider);
     }
+  }
+
+  FeedPostEngagement _engagementPreservingReaction(
+    FeedPostEngagement local,
+    FeedPostEngagement server,
+  ) {
+    if (!_reactionInFlight) {
+      return server;
+    }
+    return FeedPostEngagement(
+      commentsCount: server.commentsCount,
+      reactionsCount: local.reactionsCount,
+      myReactionType: local.myReactionType,
+    );
   }
 }
 

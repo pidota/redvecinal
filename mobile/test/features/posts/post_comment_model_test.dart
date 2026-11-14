@@ -24,6 +24,28 @@ void main() {
     expect(comment.authorDisplayName, 'Vecino');
   });
 
+  test('append ordena cronológicamente tras fusión desordenada', () {
+    final first = PaginatedPostComments(
+      items: [
+        sampleCommentChronological(id: 1, createdAt: '2026-11-14T10:00:00Z'),
+        sampleCommentChronological(id: 15, createdAt: '2026-11-14T10:14:00Z'),
+        sampleCommentChronological(id: 100, createdAt: '2026-11-14T10:30:00Z'),
+      ],
+      currentPage: 1,
+      lastPage: 2,
+    );
+    final second = PaginatedPostComments(
+      items: [
+        sampleCommentChronological(id: 16, createdAt: '2026-11-14T10:15:00Z'),
+        sampleCommentChronological(id: 17, createdAt: '2026-11-14T10:16:00Z'),
+      ],
+      currentPage: 2,
+      lastPage: 2,
+    );
+    final merged = first.append(second);
+    expect(merged.items.map((c) => c.id), [1, 15, 16, 17, 100]);
+  });
+
   test('PaginatedPostComments deduplica en append', () {
     final first = sampleCommentsPage(
       items: [sampleComment(id: 1), sampleComment(id: 2)],
