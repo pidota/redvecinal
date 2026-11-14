@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Domains\Posts\Enums\PostRevisionStatus;
 use App\Domains\Posts\Enums\PostStatus;
 use App\Domains\Posts\Models\Post;
 use App\Domains\Posts\Models\PostRevision;
@@ -98,7 +99,69 @@ class PostResource extends JsonResource
             'pending_attachments' => $canSeePending
                 ? $this->serializeAttachmentsForRevision($pending, $request)
                 : [],
+            'working_content' => $this->serializeWorkingContent($request),
         ];
+    }
+
+    /**
+     * Revisión en la que el autor puede editar contenido y adjuntar archivos (borrador o rechazada).
+     *
+     * @return array{revision_id: int, title: string, body: string}|null
+     */
+    private function serializeWorkingContent(Request $request): ?array
+    {
+        $revision = $this->resolveEditableWorkingRevision($request->user());
+        if ($revision === null) {
+            return null;
+        }
+
+        return [
+            'revision_id' => $revision->id,
+            'title' => $revision->title,
+            'body' => $revision->body,
+        ];
+    }
+
+    private function resolveEditableWorkingRevision($user): ?PostRevision
+    {
+        if ($user === null || $user->id !== $this->author_id || ! $this->isCommunity()) {
+            return null;
+        }
+
+        if (! Gate::forUser($user)->allows('update', $this->resource)) {
+            return null;
+        }
+
+        if ($this->status === PostStatus::Pending) {
+            return null;
+        }
+
+        $candidates = $this->relationLoaded('revisions')
+            ? $this->revisions
+            : $this->revisions()
+                ->whereIn('status', [
+                    PostRevisionStatus::Draft,
+                    PostRevisionStatus::Rejected,
+                ])
+                ->get();
+
+        $working = $candidates
+            ->filter(fn (PostRevision $revision) => in_array($revision->status, [
+                PostRevisionStatus::Draft,
+                PostRevisionStatus::Rejected,
+            ], true))
+            ->sortByDesc('revision_number')
+            ->first();
+
+        if ($working === null) {
+            return null;
+        }
+
+        if ($this->current_published_revision_id !== null && $working->id === $this->current_published_revision_id) {
+            return null;
+        }
+
+        return $working;
     }
 
     private function resolveContentRevision(?PostRevision $published): ?PostRevision
