@@ -19,7 +19,8 @@ class PostPolicy
     public function view(User $user, Post $post): bool
     {
         return match ($post->status) {
-            PostStatus::Published, PostStatus::Hidden => $this->canViewPublishedScope($user, $post),
+            PostStatus::Published => $this->canViewPublishedScope($user, $post),
+            PostStatus::Hidden => $this->canViewHidden($user, $post),
             PostStatus::Draft, PostStatus::Rejected => $post->author_id === $user->id,
             PostStatus::Pending => $post->author_id === $user->id || $this->canModerateCommunity($user, $post),
             PostStatus::Archived => $post->author_id === $user->id
@@ -155,8 +156,8 @@ class PostPolicy
             return false;
         }
 
-        if ($post->current_published_revision_id === $revision->id && $this->canViewPublishedScope($user, $post)) {
-            return true;
+        if ($post->current_published_revision_id === $revision->id) {
+            return $this->view($user, $post);
         }
 
         if ($revision->status->value === 'pending' && $this->view($user, $post)) {
@@ -164,6 +165,23 @@ class PostPolicy
         }
 
         return $post->author_id === $user->id && in_array($post->status, [PostStatus::Draft, PostStatus::Rejected], true);
+    }
+
+    private function canViewHidden(User $user, Post $post): bool
+    {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        if ($post->author_id === $user->id) {
+            return true;
+        }
+
+        if ($this->canModerateCommunity($user, $post)) {
+            return true;
+        }
+
+        return $this->hide($user, $post);
     }
 
     private function canViewPublishedScope(User $user, Post $post): bool
