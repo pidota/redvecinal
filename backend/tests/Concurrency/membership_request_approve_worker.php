@@ -35,11 +35,18 @@ if ($request === null || $actor === null) {
 try {
     app(ApproveMembershipRequestService::class)->execute($request, $actor, null);
     fwrite(STDOUT, "OK\n");
+    fflush(STDOUT);
     exit(0);
 } catch (MembershipRequestException $e) {
     fwrite(STDOUT, 'ERR:'.$e->httpStatus.':'.$e->getMessage()."\n");
+    fflush(STDOUT);
     exit(0);
 } catch (QueryException $e) {
     fwrite(STDOUT, 'ERR:500:query:'.$e->getMessage()."\n");
+    fflush(STDOUT);
+    exit(0);
+} catch (Throwable $e) {
+    fwrite(STDOUT, 'ERR:500:'.get_class($e).':'.$e->getMessage()."\n");
+    fflush(STDOUT);
     exit(0);
 }

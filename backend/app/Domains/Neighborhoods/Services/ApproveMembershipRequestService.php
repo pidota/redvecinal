@@ -11,10 +11,10 @@ use App\Domains\Neighborhoods\Models\GroupMember;
 use App\Domains\Neighborhoods\Models\NeighborhoodMembershipRequest;
 use App\Domains\Neighborhoods\Support\GroupUserMembershipLocks;
 use App\Domains\Neighborhoods\Support\MembershipEventRecorder;
+use App\Domains\Neighborhoods\Support\MembershipRequestConcurrency;
 use App\Domains\Neighborhoods\Support\MembershipRequestDatabase;
 use App\Models\User;
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\DB;
 
 class ApproveMembershipRequestService
 {
@@ -32,7 +32,7 @@ class ApproveMembershipRequestService
             throw new MembershipRequestException('La junta no permite aprobaciones en su estado actual.', 422);
         }
 
-        return DB::transaction(function () use ($request, $actor, $reviewNote, $group) {
+        return MembershipRequestConcurrency::runTransactional(function () use ($request, $actor, $reviewNote, $group) {
             GroupUserMembershipLocks::lockMembershipRequestsForPair($group->id, $request->user_id);
 
             $lockedRequest = NeighborhoodMembershipRequest::query()
@@ -41,6 +41,14 @@ class ApproveMembershipRequestService
                 ->firstOrFail();
 
             if ($lockedRequest->status !== MembershipRequestStatus::Pending) {
+                if (
+                    MembershipRequestConcurrency::shouldReconcileDeadlock()
+                    && $lockedRequest->status === MembershipRequestStatus::Approved
+                    && $lockedRequest->reviewed_by === $actor->id
+                ) {
+                    return $lockedRequest->fresh(['neighborhoodGroup.municipality', 'user', 'reviewer']);
+                }
+
                 throw new MembershipRequestException('Solo se pueden aprobar solicitudes pendientes.', 409);
             }
 
