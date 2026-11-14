@@ -12,7 +12,10 @@ import 'package:red_vecinal/features/auth/domain/auth_state.dart';
 
 import 'features/auth/auth_test_support.dart';
 import 'features/neighborhoods/neighborhood_test_support.dart';
+import 'features/posts/post_test_support.dart';
 import 'package:red_vecinal/features/neighborhoods/data/neighborhood_repository.dart';
+import 'package:red_vecinal/features/posts/data/models/paginated_feed_posts.dart';
+import 'package:red_vecinal/features/posts/data/post_repository.dart';
 
 class AuthenticatedBootAuthController extends AuthController {
   @override
@@ -42,6 +45,7 @@ Future<void> pumpRedVecinalApp(
 Future<void> openMainShellAuthenticated(
   WidgetTester tester, {
   FakeNeighborhoodGateway? neighborhoodGateway,
+  FakePostGateway? postGateway,
 }) async {
   await pumpRedVecinalApp(
     tester,
@@ -51,6 +55,16 @@ Future<void> openMainShellAuthenticated(
       authControllerProvider.overrideWith(AuthenticatedBootAuthController.new),
       neighborhoodRepositoryProvider.overrideWithValue(
         neighborhoodGateway ?? FakeNeighborhoodGateway(),
+      ),
+      postRepositoryProvider.overrideWithValue(
+        postGateway ??
+            FakePostGateway(
+              feedPage: const PaginatedFeedPosts(
+                items: [],
+                currentPage: 1,
+                lastPage: 1,
+              ),
+            ),
       ),
     ],
   );

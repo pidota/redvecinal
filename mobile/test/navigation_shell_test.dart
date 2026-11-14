@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'test_helpers.dart';
 
 void main() {
-  testWidgets('navegación inferior cambia entre las cinco secciones', (tester) async {
+  testWidgets('navegación inferior cambia entre las cinco secciones', (
+    tester,
+  ) async {
     await openMainShellAuthenticated(tester);
 
     expect(find.text('Inicio'), findsWidgets);
@@ -17,7 +19,7 @@ void main() {
 
     await tester.tap(navBarIcon(Icons.article_outlined));
     await tester.pumpAndSettle();
-    expect(find.text('Feed no conectado'), findsOneWidget);
+    expect(find.text('Sin publicaciones'), findsOneWidget);
 
     await tester.tap(navBarIcon(Icons.forum_outlined));
     await tester.pumpAndSettle();

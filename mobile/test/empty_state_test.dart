@@ -10,7 +10,7 @@ void main() {
     await tester.tap(navBarIcon(Icons.article_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsLabel(RegExp('Feed no conectado')), findsOneWidget);
-    expect(find.textContaining('Fase 5.4'), findsWidgets);
+    expect(find.text('Sin publicaciones'), findsOneWidget);
+    expect(find.textContaining('Fase 5.4C'), findsWidgets);
   });
 }
