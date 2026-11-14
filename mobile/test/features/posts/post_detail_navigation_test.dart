@@ -28,6 +28,25 @@ void main() {
     expect(find.textContaining('reunión del viernes'), findsOneWidget);
   });
 
+  testWidgets('navega a crear publicación', (tester) async {
+    final fake = FakePostGateway(
+      feedPage: PaginatedFeedPosts(
+        items: [sampleCommunityPost()],
+        currentPage: 1,
+        lastPage: 1,
+      ),
+    );
+    await openMainShellAuthenticated(tester, postGateway: fake);
+
+    await tester.tap(navBarIcon(Icons.article_outlined));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Nueva'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nueva publicación'), findsOneWidget);
+  });
+
   testWidgets('pantalla inválida comunica no disponible', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: PostDetailInvalidRouteScreen()),

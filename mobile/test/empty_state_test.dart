@@ -11,6 +11,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sin publicaciones'), findsOneWidget);
-    expect(find.textContaining('Fase 5.4C'), findsWidgets);
+    expect(find.textContaining('Fase 5.4F'), findsWidgets);
   });
 }

@@ -9,6 +9,7 @@ import 'models/paginated_feed_posts.dart';
 import 'models/paginated_post_comments.dart';
 import 'models/post_comment.dart';
 import 'models/post_detail.dart';
+import 'models/post_category.dart';
 import 'models/post_reaction.dart';
 
 abstract class PostGateway {
@@ -41,6 +42,19 @@ abstract class PostGateway {
   });
 
   Future<bool> removeReaction({required int postId});
+
+  Future<List<PostCategory>> listPostCategories({String audience = 'group'});
+
+  Future<PostDetail> createCommunityPost({
+    required int neighborhoodGroupId,
+    required int categoryId,
+    required String title,
+    required String body,
+  });
+
+  Future<PostDetail> submitPost(int postId);
+
+  Future<PaginatedFeedPosts> listMyPosts({int page = 1});
 }
 
 final postRepositoryProvider = Provider<PostGateway>((ref) {
@@ -293,6 +307,149 @@ class PostRepository implements PostGateway {
       throw DioException(
         requestOptions: response.requestOptions,
         response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<List<PostCategory>> listPostCategories({
+    String audience = 'group',
+  }) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/post-categories',
+        queryParameters: {'audience': audience},
+      );
+
+      final payload = response.data;
+      if (response.statusCode != 200 || payload == null) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+        );
+      }
+
+      final raw = payload['data'];
+      if (raw is! List) {
+        return const [];
+      }
+
+      return raw
+          .whereType<Map<String, dynamic>>()
+          .map(PostCategory.fromJson)
+          .toList();
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<PostDetail> createCommunityPost({
+    required int neighborhoodGroupId,
+    required int categoryId,
+    required String title,
+    required String body,
+  }) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/posts',
+        data: {
+          'neighborhood_group_id': neighborhoodGroupId,
+          'category_id': categoryId,
+          'title': title,
+          'body': body,
+        },
+      );
+
+      final status = response.statusCode ?? 0;
+      final payload = response.data;
+      if (status == 200 && payload != null) {
+        final data = payload['data'];
+        if (data is Map<String, dynamic>) {
+          return PostDetail.fromJson(data);
+        }
+        if (payload.containsKey('id')) {
+          return PostDetail.fromJson(payload);
+        }
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<PostDetail> submitPost(int postId) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/posts/$postId/submit',
+      );
+
+      final status = response.statusCode ?? 0;
+      final payload = response.data;
+      if (status == 200 && payload != null) {
+        final data = payload['data'];
+        if (data is Map<String, dynamic>) {
+          return PostDetail.fromJson(data);
+        }
+        if (payload.containsKey('id')) {
+          return PostDetail.fromJson(payload);
+        }
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<PaginatedFeedPosts> listMyPosts({int page = 1}) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/me/posts',
+        queryParameters: {'page': page},
+      );
+
+      final payload = response.data;
+      if (response.statusCode != 200 || payload == null) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+        );
+      }
+
+      final meta = payload['meta'];
+      final currentPage =
+          meta is Map<String, dynamic>
+              ? (meta['current_page'] as int? ?? page)
+              : page;
+      final lastPage =
+          meta is Map<String, dynamic>
+              ? (meta['last_page'] as int? ?? currentPage)
+              : currentPage;
+
+      return PaginatedFeedPosts(
+        items: _parsePostList(payload['data']),
+        currentPage: currentPage,
+        lastPage: lastPage,
       );
     } on DioException catch (e) {
       throw mapDioError(e, loginRequest: false);

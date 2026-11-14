@@ -22,7 +22,12 @@ class PostsScreen extends ConsumerWidget {
 
     return FeatureShellScaffold(
       title: 'Publicaciones',
-      phaseLabel: 'Fase 5.4C',
+      phaseLabel: 'Fase 5.4F',
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push('/posts/create'),
+        icon: const Icon(Icons.add),
+        label: const Text('Nueva'),
+      ),
       body: feedAsync.when(
         loading: () => const Center(child: RvLoadingIndicator()),
         error:
