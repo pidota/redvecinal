@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/network/api_failure.dart';
 import '../../../core/theme/rv_spacing.dart';
@@ -84,7 +85,13 @@ class PostsScreen extends ConsumerWidget {
                 final post = page.items[index];
                 return Padding(
                   padding: const EdgeInsets.only(bottom: RvSpacing.sm),
-                  child: PostFeedCard(post: post),
+                  child: PostFeedCard(
+                    post: post,
+                    onOpen:
+                        post.status == 'published'
+                            ? () => context.push('/posts/${post.id}')
+                            : null,
+                  ),
                 );
               },
             ),

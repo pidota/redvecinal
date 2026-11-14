@@ -6,11 +6,20 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_failure.dart';
 import 'models/feed_post.dart';
 import 'models/paginated_feed_posts.dart';
+import 'models/post_detail.dart';
 
 abstract class PostGateway {
   Future<PaginatedFeedPosts> listPosts({
     int page = 1,
     int? neighborhoodGroupId,
+  });
+
+  Future<PostDetail> getPost(int postId);
+
+  Future<List<int>> downloadAttachment({
+    required int postId,
+    required int attachmentId,
+    String? relativePath,
   });
 }
 
@@ -79,6 +88,62 @@ class PostRepository implements PostGateway {
         .whereType<Map<String, dynamic>>()
         .map(FeedPost.fromJson)
         .toList();
+  }
+
+  @override
+  Future<PostDetail> getPost(int postId) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.get<Map<String, dynamic>>('/posts/$postId');
+
+      final payload = response.data;
+      if (response.statusCode == 200 && payload != null) {
+        final data = payload['data'];
+        if (data is Map<String, dynamic>) {
+          return PostDetail.fromJson(data);
+        }
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<List<int>> downloadAttachment({
+    required int postId,
+    required int attachmentId,
+    String? relativePath,
+  }) async {
+    _ensureConfigured();
+
+    final path = relativePath ?? '/posts/$postId/attachments/$attachmentId';
+
+    try {
+      final response = await _dio.get<List<int>>(
+        path,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: const {'Accept': '*/*'},
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        return response.data!;
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
   }
 
   void _ensureConfigured() {

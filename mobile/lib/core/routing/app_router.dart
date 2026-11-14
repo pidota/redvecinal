@@ -15,6 +15,8 @@ import '../../features/neighborhoods/presentation/group_membership_review_screen
 import '../../features/neighborhoods/presentation/neighborhood_join_screen.dart';
 import '../../features/neighborhoods/presentation/neighborhoods_screen.dart';
 import '../../features/neighborhoods/presentation/reviewable_groups_screen.dart';
+import '../../features/posts/presentation/post_detail_invalid_route_screen.dart';
+import '../../features/posts/presentation/post_detail_screen.dart';
 import '../../features/posts/presentation/posts_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import 'main_shell_scaffold.dart';
@@ -70,10 +72,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
       ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/session-retry',
         builder: (context, state) => const SessionRetryScreen(),
@@ -147,6 +146,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/posts',
                 builder: (context, state) => const PostsScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':postId',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) {
+                      final raw = state.pathParameters['postId'] ?? '';
+                      final id = int.tryParse(raw);
+                      if (id == null) {
+                        return const PostDetailInvalidRouteScreen();
+                      }
+                      return PostDetailScreen(postId: id);
+                    },
+                  ),
+                ],
               ),
             ],
           ),

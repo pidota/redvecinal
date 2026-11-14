@@ -21,6 +21,23 @@ void main() {
     expect(find.byIcon(Icons.attach_file), findsOneWidget);
   });
 
+  testWidgets('onOpen dispara al pulsar', (tester) async {
+    var tapped = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PostFeedCard(
+            post: sampleCommunityPost(),
+            onOpen: () => tapped = true,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Aviso de reunión'));
+    expect(tapped, isTrue);
+  });
+
   testWidgets('municipal sin junta muestra municipio', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

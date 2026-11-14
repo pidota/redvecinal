@@ -1,5 +1,6 @@
 import 'package:red_vecinal/features/posts/data/models/feed_post.dart';
 import 'package:red_vecinal/features/posts/data/models/paginated_feed_posts.dart';
+import 'package:red_vecinal/features/posts/data/models/post_detail.dart';
 import 'package:red_vecinal/features/posts/data/post_repository.dart';
 
 Map<String, dynamic> sampleCommunityPostJson({
@@ -87,6 +88,12 @@ FeedPost sampleCommunityPost({int id = 1}) =>
 FeedPost sampleMunicipalPost({int id = 9}) =>
     FeedPost.fromJson(sampleMunicipalPostJson(id: id));
 
+PostDetail sampleCommunityPostDetail({int id = 1}) =>
+    PostDetail.fromJson(sampleCommunityPostJson(id: id));
+
+PostDetail sampleMunicipalPostDetail({int id = 9}) =>
+    PostDetail.fromJson(sampleMunicipalPostJson(id: id));
+
 class FakePostGateway implements PostGateway {
   FakePostGateway({
     PaginatedFeedPosts? feedPage,
@@ -95,6 +102,12 @@ class FakePostGateway implements PostGateway {
     this.feedDelayMs = 0,
     this.pagesByNumber,
     this.callCount = 0,
+    this.detailById,
+    this.detailFailureById,
+    this.detailDelayMs = 0,
+    this.attachmentBytesById,
+    this.downloadFailure,
+    this.downloadDelayMs = 0,
   }) : feedPage =
            feedPage ??
            PaginatedFeedPosts(
@@ -109,6 +122,14 @@ class FakePostGateway implements PostGateway {
   int feedDelayMs;
   Map<int, PaginatedFeedPosts>? pagesByNumber;
   int callCount;
+  Map<int, PostDetail>? detailById;
+  Map<int, Object?>? detailFailureById;
+  int detailDelayMs;
+  Map<int, List<int>>? attachmentBytesById;
+  Object? downloadFailure;
+  int downloadDelayMs;
+  int detailCallCount = 0;
+  int downloadCallCount = 0;
 
   @override
   Future<PaginatedFeedPosts> listPosts({
@@ -140,5 +161,42 @@ class FakePostGateway implements PostGateway {
       );
     }
     return feedPage;
+  }
+
+  @override
+  Future<PostDetail> getPost(int postId) async {
+    detailCallCount++;
+    if (detailDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: detailDelayMs));
+    }
+    final failure = detailFailureById?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    final detail = detailById?[postId];
+    if (detail != null) {
+      return detail;
+    }
+    return sampleCommunityPostDetail(id: postId);
+  }
+
+  @override
+  Future<List<int>> downloadAttachment({
+    required int postId,
+    required int attachmentId,
+    String? relativePath,
+  }) async {
+    downloadCallCount++;
+    if (downloadDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: downloadDelayMs));
+    }
+    if (downloadFailure != null) {
+      throw downloadFailure!;
+    }
+    final bytes = attachmentBytesById?[attachmentId];
+    if (bytes != null) {
+      return bytes;
+    }
+    return [0x25, 0x50, 0x44, 0x46];
   }
 }
