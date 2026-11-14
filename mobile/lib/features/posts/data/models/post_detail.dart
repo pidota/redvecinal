@@ -109,6 +109,8 @@ class PostDetail {
     required this.attachments,
     required this.commentsEnabled,
     this.workingContent,
+    this.pendingContent,
+    this.hasPendingAmendment = false,
   });
 
   factory PostDetail.fromJson(Map<String, dynamic> json) {
@@ -120,12 +122,14 @@ class PostDetail {
     final engagementRaw = json['engagement'];
     final attachmentsRaw = json['attachments'];
     final workingRaw = json['working_content'];
+    final pendingRaw = json['pending_content'];
 
     return PostDetail(
       id: json['id'] as int,
       postKind: json['post_kind'] as String,
       status: json['status'] as String,
       commentsEnabled: json['comments_enabled'] as bool? ?? true,
+      hasPendingAmendment: json['has_pending_amendment'] as bool? ?? false,
       publishedAt: _parseDateTime(json['published_at'] as String?),
       author:
           authorRaw is Map<String, dynamic>
@@ -162,6 +166,10 @@ class PostDetail {
           workingRaw is Map<String, dynamic>
               ? PostWorkingContent.fromJson(workingRaw)
               : null,
+      pendingContent:
+          pendingRaw is Map<String, dynamic>
+              ? PostDetailContent.fromJson(pendingRaw)
+              : null,
     );
   }
 
@@ -178,6 +186,8 @@ class PostDetail {
   final FeedPostEngagement engagement;
   final List<PostAttachment> attachments;
   final PostWorkingContent? workingContent;
+  final PostDetailContent? pendingContent;
+  final bool hasPendingAmendment;
 
   bool get isMunicipal => postKind == 'municipal';
 
@@ -200,6 +210,8 @@ class PostDetail {
       attachments: attachments,
       commentsEnabled: commentsEnabled,
       workingContent: workingContent,
+      pendingContent: pendingContent,
+      hasPendingAmendment: hasPendingAmendment,
     );
   }
 
@@ -210,9 +222,70 @@ class PostDetail {
     return neighborhoodGroup?.name ?? 'Junta vecinal';
   }
 
-  String get title => content?.title ?? workingContent?.title ?? 'Sin título';
+  String get title {
+    switch (status) {
+      case 'draft':
+      case 'rejected':
+        if (workingContent != null) {
+          return _nonEmpty(workingContent!.title) ?? 'Sin título';
+        }
+        return _nonEmpty(content?.title) ?? 'Sin título';
+      case 'pending':
+        return _firstNonEmptyTitle([pendingContent?.title, content?.title]);
+      case 'published':
+      case 'hidden':
+      case 'archived':
+        return _firstNonEmptyTitle([content?.title, workingContent?.title]);
+      default:
+        return _firstNonEmptyTitle([
+          content?.title,
+          workingContent?.title,
+          pendingContent?.title,
+        ]);
+    }
+  }
 
-  String get bodyDisplay => content?.displayText ?? workingContent?.body ?? '';
+  String get bodyDisplay {
+    switch (status) {
+      case 'draft':
+      case 'rejected':
+        if (workingContent != null) {
+          return _nonEmpty(workingContent!.body) ?? '';
+        }
+        return content?.displayText ?? '';
+      case 'pending':
+        if (pendingContent != null) {
+          return pendingContent!.displayText;
+        }
+        return content?.displayText ?? '';
+      case 'published':
+      case 'hidden':
+      case 'archived':
+        if (content != null) {
+          return content!.displayText;
+        }
+        return _nonEmpty(workingContent?.body) ?? '';
+      default:
+        return content?.displayText ?? _nonEmpty(workingContent?.body) ?? '';
+    }
+  }
+
+  static String _firstNonEmptyTitle(List<String?> candidates) {
+    for (final raw in candidates) {
+      final value = _nonEmpty(raw);
+      if (value != null) {
+        return value;
+      }
+    }
+    return 'Sin título';
+  }
+
+  static String? _nonEmpty(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return null;
+    }
+    return raw.trim();
+  }
 
   static String plainTextForDisplay(String? body, String? bodyHtml) {
     if (body != null && body.trim().isNotEmpty) {

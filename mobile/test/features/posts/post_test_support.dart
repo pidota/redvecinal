@@ -198,6 +198,7 @@ class FakePostGateway implements PostGateway {
     this.myPostsPage,
     this.myPostsByPage,
     this.myPostsFailure,
+    this.myPostsFailurePage,
     this.myPostsDelayMs = 0,
     this.onCreatePost,
     this.onSubmitPost,
@@ -249,6 +250,7 @@ class FakePostGateway implements PostGateway {
   PaginatedFeedPosts? myPostsPage;
   Map<int, PaginatedFeedPosts>? myPostsByPage;
   Object? myPostsFailure;
+  int? myPostsFailurePage;
   int myPostsDelayMs;
   void Function(int groupId, int categoryId, String title, String body)?
   onCreatePost;
@@ -570,7 +572,8 @@ class FakePostGateway implements PostGateway {
     if (myPostsDelayMs > 0) {
       await Future<void>.delayed(Duration(milliseconds: myPostsDelayMs));
     }
-    if (myPostsFailure != null) {
+    if (myPostsFailure != null &&
+        (myPostsFailurePage == null || myPostsFailurePage == page)) {
       throw myPostsFailure!;
     }
     final byPage = myPostsByPage?[page];
@@ -611,12 +614,58 @@ PostDetail draftPostDetail({
   return PostDetail.fromJson(json);
 }
 
-PostDetail pendingPostDetail({required int id}) {
+PostDetail pendingPostDetail({
+  required int id,
+  String title = 'En moderación',
+  String body = 'Texto enviado a revisión',
+}) {
   final json = Map<String, dynamic>.from(sampleCommunityPostJson(id: id));
   json['status'] = 'pending';
   json['published_at'] = null;
+  json['content'] = null;
   json['working_content'] = null;
+  json['pending_content'] = {
+    'revision_id': id * 10 + 1,
+    'title': title,
+    'body': body,
+    'body_html': '<p>$body</p>',
+  };
   return PostDetail.fromJson(json);
+}
+
+Map<String, dynamic> mineDraftPostJson({
+  int id = 50,
+  String title = 'Borrador local',
+  String body = 'Cuerpo borrador',
+}) {
+  return {
+    'id': id,
+    'post_kind': 'community',
+    'status': 'draft',
+    'published_at': null,
+    'has_pending_amendment': false,
+    'author': {'id': 10, 'name': 'María Vecina'},
+    'neighborhood_group': {
+      'id': 2,
+      'name': 'Junta Centro',
+      'slug': 'junta-centro',
+    },
+    'category': {
+      'id': 2,
+      'slug': 'aviso-comunitario',
+      'name': 'Aviso comunitario',
+    },
+    'municipality': {'id': 1, 'name': 'Chépica', 'slug': 'chepica'},
+    'content': null,
+    'pending_content': null,
+    'working_content': {'revision_id': 90, 'title': title, 'body': body},
+    'engagement': {
+      'comments_count': 0,
+      'reactions_count': 0,
+      'my_reaction': null,
+    },
+    'attachments': [],
+  };
 }
 
 PostDetail detailWithEngagement({

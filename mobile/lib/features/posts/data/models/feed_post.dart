@@ -1,3 +1,5 @@
+import 'post_working_content.dart';
+
 class FeedPostAuthor {
   const FeedPostAuthor({required this.id, required this.name});
 
@@ -164,6 +166,9 @@ class FeedPost {
     required this.content,
     required this.engagement,
     required this.attachments,
+    this.workingContent,
+    this.pendingContent,
+    this.hasPendingAmendment = false,
   });
 
   factory FeedPost.fromJson(Map<String, dynamic> json) {
@@ -172,6 +177,8 @@ class FeedPost {
     final categoryRaw = json['category'];
     final authorRaw = json['author'];
     final contentRaw = json['content'];
+    final workingRaw = json['working_content'];
+    final pendingRaw = json['pending_content'];
     final engagementRaw = json['engagement'];
     final attachmentsRaw = json['attachments'];
 
@@ -180,6 +187,7 @@ class FeedPost {
       postKind: json['post_kind'] as String,
       status: json['status'] as String,
       publishedAt: _parseDateTime(json['published_at'] as String?),
+      hasPendingAmendment: json['has_pending_amendment'] as bool? ?? false,
       author:
           authorRaw is Map<String, dynamic>
               ? FeedPostAuthor.fromJson(authorRaw)
@@ -199,6 +207,14 @@ class FeedPost {
       content:
           contentRaw is Map<String, dynamic>
               ? FeedPostContent.fromJson(contentRaw)
+              : null,
+      workingContent:
+          workingRaw is Map<String, dynamic>
+              ? PostWorkingContent.fromJson(workingRaw)
+              : null,
+      pendingContent:
+          pendingRaw is Map<String, dynamic>
+              ? FeedPostContent.fromJson(pendingRaw)
               : null,
       engagement:
           engagementRaw is Map<String, dynamic>
@@ -225,6 +241,9 @@ class FeedPost {
   final FeedPostContent? content;
   final FeedPostEngagement engagement;
   final List<FeedPostAttachmentMeta> attachments;
+  final PostWorkingContent? workingContent;
+  final FeedPostContent? pendingContent;
+  final bool hasPendingAmendment;
 
   bool get isMunicipal => postKind == 'municipal';
 

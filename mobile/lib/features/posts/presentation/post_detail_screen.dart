@@ -9,6 +9,7 @@ import '../../../shared/widgets/rv_empty_state.dart';
 import '../../../shared/widgets/rv_loading_indicator.dart';
 import '../../neighborhoods/presentation/widgets/neighborhood_api_error.dart';
 import '../application/post_detail_controller.dart';
+import '../data/models/feed_post_mine_presentation.dart';
 import '../data/models/post_detail.dart';
 import 'widgets/post_attachment_list.dart';
 import 'widgets/post_comments_section.dart';
@@ -108,6 +109,8 @@ class _PostDetailContent extends ConsumerWidget {
     final categoryName = detail.category?.name ?? 'Publicación';
     final notifier = ref.read(postDetailControllerProvider(postId).notifier);
 
+    final showEngagement = detail.isPublished;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -115,6 +118,24 @@ class _PostDetailContent extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (!detail.isPublished) ...[
+                Text(
+                  FeedPostMinePresentation.statusLabel(detail.status),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: RvSpacing.xs),
+              ],
+              if (detail.hasPendingAmendment) ...[
+                Text(
+                  'Enmienda en revisión',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.secondary,
+                  ),
+                ),
+                const SizedBox(height: RvSpacing.xs),
+              ],
               Text(detail.title, style: theme.textTheme.headlineSmall),
               const SizedBox(height: RvSpacing.sm),
               Text(detail.author.name, style: theme.textTheme.labelLarge),
@@ -133,28 +154,32 @@ class _PostDetailContent extends ConsumerWidget {
                   _MetaChip(icon: Icons.category_outlined, text: categoryName),
                 ],
               ),
-              const SizedBox(height: RvSpacing.sm),
-              Text(
-                _formatPostDate(context, detail.publishedAt),
-                style: theme.textTheme.bodySmall,
-              ),
+              if (detail.publishedAt != null) ...[
+                const SizedBox(height: RvSpacing.sm),
+                Text(
+                  _formatPostDate(context, detail.publishedAt),
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
               const SizedBox(height: RvSpacing.md),
               PostDetailBody(text: detail.bodyDisplay),
-              const SizedBox(height: RvSpacing.md),
-              Wrap(
-                spacing: RvSpacing.md,
-                runSpacing: RvSpacing.xs,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 18,
-                    color: theme.colorScheme.primary,
-                  ),
-                  Text('${detail.engagement.commentsCount} comentarios'),
-                  PostReactionControl(postId: postId, detail: detail),
-                ],
-              ),
+              if (showEngagement) ...[
+                const SizedBox(height: RvSpacing.md),
+                Wrap(
+                  spacing: RvSpacing.md,
+                  runSpacing: RvSpacing.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    Text('${detail.engagement.commentsCount} comentarios'),
+                    PostReactionControl(postId: postId, detail: detail),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -182,8 +207,10 @@ class _PostDetailContent extends ConsumerWidget {
             );
           },
         ),
-        const SizedBox(height: RvSpacing.md),
-        PostCommentsSection(postId: postId, detail: detail),
+        if (showEngagement) ...[
+          const SizedBox(height: RvSpacing.md),
+          PostCommentsSection(postId: postId, detail: detail),
+        ],
       ],
     );
   }

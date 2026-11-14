@@ -17,6 +17,7 @@ import '../../features/neighborhoods/presentation/neighborhoods_screen.dart';
 import '../../features/neighborhoods/presentation/reviewable_groups_screen.dart';
 import '../../features/posts/presentation/post_detail_invalid_route_screen.dart';
 import '../../features/posts/presentation/create_post_screen.dart';
+import '../../features/posts/presentation/my_posts_screen.dart';
 import '../../features/posts/presentation/post_detail_screen.dart';
 import '../../features/posts/presentation/posts_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
@@ -152,6 +153,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'create',
                     parentNavigatorKey: _rootNavigatorKey,
                     builder: (context, state) => const CreatePostScreen(),
+                  ),
+                  GoRoute(
+                    path: 'mine',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) => const MyPostsScreen(),
                   ),
                   GoRoute(
                     path: ':postId',

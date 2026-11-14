@@ -38,25 +38,48 @@ class PostsScreen extends ConsumerWidget {
               onRetry: feedNotifier.refresh,
             ),
         data: (page) {
+          Widget mineEntry({bool withOuterPadding = false}) {
+            final button = Align(
+              alignment: Alignment.centerLeft,
+              child: RvPrimaryButton(
+                label: 'Mis publicaciones',
+                icon: Icons.inventory_2_outlined,
+                onPressed: () => context.push('/posts/mine'),
+              ),
+            );
+            if (!withOuterPadding) {
+              return button;
+            }
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(
+                RvSpacing.md,
+                RvSpacing.md,
+                RvSpacing.md,
+                RvSpacing.sm,
+              ),
+              child: button,
+            );
+          }
+
           if (page.items.isEmpty) {
             return RefreshIndicator(
               onRefresh: feedNotifier.refresh,
-              child: CustomScrollView(
+              child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: RvEmptyState(
-                      title: 'Sin publicaciones',
-                      message:
-                          'Todavía no hay publicaciones visibles en tus juntas o municipio. '
-                          'Cuando haya novedades, aparecerán aquí.',
-                      icon: Icons.article_outlined,
-                      action: RvPrimaryButton(
-                        label: 'Actualizar',
-                        icon: Icons.refresh,
-                        onPressed: feedNotifier.refresh,
-                      ),
+                padding: const EdgeInsets.all(RvSpacing.md),
+                children: [
+                  mineEntry(),
+                  const SizedBox(height: RvSpacing.lg),
+                  RvEmptyState(
+                    title: 'Sin publicaciones',
+                    message:
+                        'Todavía no hay publicaciones visibles en tus juntas o municipio. '
+                        'Cuando haya novedades, aparecerán aquí.',
+                    icon: Icons.article_outlined,
+                    action: RvPrimaryButton(
+                      label: 'Actualizar',
+                      icon: Icons.refresh,
+                      onPressed: feedNotifier.refresh,
                     ),
                   ),
                 ],
@@ -68,10 +91,14 @@ class PostsScreen extends ConsumerWidget {
             onRefresh: feedNotifier.refresh,
             child: ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(RvSpacing.md),
-              itemCount: page.items.length + (page.hasMore ? 1 : 0),
+              padding: const EdgeInsets.only(bottom: RvSpacing.md),
+              itemCount: page.items.length + 1 + (page.hasMore ? 1 : 0),
               itemBuilder: (context, index) {
-                if (index >= page.items.length) {
+                if (index == 0) {
+                  return mineEntry(withOuterPadding: true);
+                }
+                final itemIndex = index - 1;
+                if (itemIndex >= page.items.length) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: RvSpacing.md),
                     child: Center(
@@ -87,9 +114,14 @@ class PostsScreen extends ConsumerWidget {
                   );
                 }
 
-                final post = page.items[index];
+                final post = page.items[itemIndex];
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: RvSpacing.sm),
+                  padding: const EdgeInsets.fromLTRB(
+                    RvSpacing.md,
+                    0,
+                    RvSpacing.md,
+                    RvSpacing.sm,
+                  ),
                   child: PostFeedCard(
                     post: post,
                     onOpen:
