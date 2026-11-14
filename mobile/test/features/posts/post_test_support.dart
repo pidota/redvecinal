@@ -1,8 +1,10 @@
+import 'package:dio/dio.dart';
 import 'package:red_vecinal/core/network/api_failure.dart';
 import 'package:red_vecinal/features/posts/data/models/feed_post.dart';
 import 'package:red_vecinal/features/posts/data/models/paginated_feed_posts.dart';
 import 'package:red_vecinal/features/posts/data/models/post_category.dart';
 import 'package:red_vecinal/features/posts/data/models/paginated_post_comments.dart';
+import 'package:red_vecinal/features/posts/data/models/post_attachment_upload_result.dart';
 import 'package:red_vecinal/features/posts/data/models/post_comment.dart';
 import 'package:red_vecinal/features/posts/data/models/post_detail.dart';
 import 'package:red_vecinal/features/posts/data/models/post_reaction.dart';
@@ -200,6 +202,9 @@ class FakePostGateway implements PostGateway {
     this.onCreatePost,
     this.onSubmitPost,
     this.createPostThrowsRaw = false,
+    this.uploadFailureByPostId,
+    this.uploadThrowsUncertain = false,
+    this.uploadDelayMs = 0,
   }) : feedPage =
            feedPage ??
            PaginatedFeedPosts(
@@ -249,8 +254,13 @@ class FakePostGateway implements PostGateway {
   onCreatePost;
   void Function(int postId)? onSubmitPost;
   bool createPostThrowsRaw;
+  Map<int, Object?>? uploadFailureByPostId;
+  bool uploadThrowsUncertain;
+  int uploadDelayMs;
 
   int detailCallCount = 0;
+  int uploadCallCount = 0;
+  final List<Map<String, dynamic>> uploadPayloads = [];
   int downloadCallCount = 0;
   int listCommentsCallCount = 0;
   int createCommentCallCount = 0;
@@ -481,7 +491,9 @@ class FakePostGateway implements PostGateway {
     onCreatePost?.call(neighborhoodGroupId, categoryId, title, body);
     final id = 900 + createPostCallCount;
     final existing = detailById?[id];
-    if (existing != null) {
+    if (existing != null &&
+        (existing.status == 'draft' || existing.status == 'rejected') &&
+        existing.editableRevisionId != null) {
       return existing;
     }
     return draftPostDetail(
@@ -490,6 +502,43 @@ class FakePostGateway implements PostGateway {
       categoryId: categoryId,
       title: title,
       body: body,
+    );
+  }
+
+  @override
+  Future<PostAttachmentUploadResult> uploadPostAttachment({
+    required int postId,
+    required int revisionId,
+    required String filePath,
+    required String filename,
+    required String mimeType,
+    CancelToken? cancelToken,
+    void Function(int sent, int total)? onSendProgress,
+  }) async {
+    uploadCallCount++;
+    uploadPayloads.add({
+      'postId': postId,
+      'revisionId': revisionId,
+      'filename': filename,
+      'mimeType': mimeType,
+    });
+    if (uploadDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: uploadDelayMs));
+    }
+    if (uploadThrowsUncertain) {
+      throw Exception('timeout simulado');
+    }
+    final failure = uploadFailureByPostId?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    final id = 7000 + uploadCallCount;
+    return PostAttachmentUploadResult(
+      id: id,
+      revisionId: revisionId,
+      originalDisplayName: filename,
+      mimeType: mimeType,
+      sizeBytes: 1200,
     );
   }
 
@@ -552,12 +601,12 @@ PostDetail draftPostDetail({
   json['neighborhood_group_id'] = groupId;
   json['category_id'] = categoryId;
   json['published_at'] = null;
-  json['content'] = {
-    'revision_id': 1,
+  json['content'] = null;
+  json['attachments'] = [];
+  json['working_content'] = {
+    'revision_id': id * 10,
     'title': title,
     'body': body,
-    'body_html': '<p>$body</p>',
-    'category_id': categoryId,
   };
   return PostDetail.fromJson(json);
 }
@@ -566,6 +615,7 @@ PostDetail pendingPostDetail({required int id}) {
   final json = Map<String, dynamic>.from(sampleCommunityPostJson(id: id));
   json['status'] = 'pending';
   json['published_at'] = null;
+  json['working_content'] = null;
   return PostDetail.fromJson(json);
 }
 

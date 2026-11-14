@@ -1,4 +1,5 @@
 import 'feed_post.dart';
+import 'post_working_content.dart';
 
 class PostDetailContent {
   const PostDetailContent({
@@ -107,6 +108,7 @@ class PostDetail {
     required this.engagement,
     required this.attachments,
     required this.commentsEnabled,
+    this.workingContent,
   });
 
   factory PostDetail.fromJson(Map<String, dynamic> json) {
@@ -117,6 +119,7 @@ class PostDetail {
     final contentRaw = json['content'];
     final engagementRaw = json['engagement'];
     final attachmentsRaw = json['attachments'];
+    final workingRaw = json['working_content'];
 
     return PostDetail(
       id: json['id'] as int,
@@ -155,6 +158,10 @@ class PostDetail {
                   .map(PostAttachment.fromJson)
                   .toList()
               : const [],
+      workingContent:
+          workingRaw is Map<String, dynamic>
+              ? PostWorkingContent.fromJson(workingRaw)
+              : null,
     );
   }
 
@@ -170,8 +177,11 @@ class PostDetail {
   final PostDetailContent? content;
   final FeedPostEngagement engagement;
   final List<PostAttachment> attachments;
+  final PostWorkingContent? workingContent;
 
   bool get isMunicipal => postKind == 'municipal';
+
+  int? get editableRevisionId => workingContent?.revisionId;
 
   bool get isPublished => status == 'published';
 
@@ -189,6 +199,7 @@ class PostDetail {
       engagement: engagement,
       attachments: attachments,
       commentsEnabled: commentsEnabled,
+      workingContent: workingContent,
     );
   }
 
@@ -199,9 +210,9 @@ class PostDetail {
     return neighborhoodGroup?.name ?? 'Junta vecinal';
   }
 
-  String get title => content?.title ?? 'Sin título';
+  String get title => content?.title ?? workingContent?.title ?? 'Sin título';
 
-  String get bodyDisplay => content?.displayText ?? '';
+  String get bodyDisplay => content?.displayText ?? workingContent?.body ?? '';
 
   static String plainTextForDisplay(String? body, String? bodyHtml) {
     if (body != null && body.trim().isNotEmpty) {

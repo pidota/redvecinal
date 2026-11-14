@@ -10,6 +10,7 @@ import 'models/paginated_post_comments.dart';
 import 'models/post_comment.dart';
 import 'models/post_detail.dart';
 import 'models/post_category.dart';
+import 'models/post_attachment_upload_result.dart';
 import 'models/post_reaction.dart';
 
 abstract class PostGateway {
@@ -53,6 +54,16 @@ abstract class PostGateway {
   });
 
   Future<PostDetail> submitPost(int postId);
+
+  Future<PostAttachmentUploadResult> uploadPostAttachment({
+    required int postId,
+    required int revisionId,
+    required String filePath,
+    required String filename,
+    required String mimeType,
+    CancelToken? cancelToken,
+    void Function(int sent, int total)? onSendProgress,
+  });
 
   Future<PaginatedFeedPosts> listMyPosts({int page = 1});
 }
@@ -377,6 +388,52 @@ class PostRepository implements PostGateway {
         if (payload.containsKey('id')) {
           return PostDetail.fromJson(payload);
         }
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<PostAttachmentUploadResult> uploadPostAttachment({
+    required int postId,
+    required int revisionId,
+    required String filePath,
+    required String filename,
+    required String mimeType,
+    CancelToken? cancelToken,
+    void Function(int sent, int total)? onSendProgress,
+  }) async {
+    _ensureConfigured();
+
+    try {
+      final formData = FormData.fromMap({
+        'revision_id': revisionId,
+        'file': await MultipartFile.fromFile(filePath, filename: filename),
+      });
+
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/posts/$postId/attachments',
+        data: formData,
+        cancelToken: cancelToken,
+        onSendProgress: onSendProgress,
+        options: Options(
+          contentType: 'multipart/form-data',
+          sendTimeout: const Duration(minutes: 2),
+          receiveTimeout: const Duration(minutes: 2),
+          headers: const {'Accept': 'application/json'},
+        ),
+      );
+
+      final status = response.statusCode ?? 0;
+      final payload = response.data;
+      if (status == 201 && payload != null) {
+        return PostAttachmentUploadResult.fromJson(payload);
       }
 
       throw DioException(

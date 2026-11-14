@@ -14,8 +14,10 @@ import '../../neighborhoods/data/models/neighborhood_group.dart';
 import '../../neighborhoods/presentation/widgets/neighborhood_api_error.dart';
 import '../application/create_post_controller.dart';
 import '../application/create_post_session_persistence.dart';
+import '../application/create_post_attachments_controller.dart';
 import '../application/draft_recovery_controller.dart';
 import '../data/models/post_category.dart';
+import 'widgets/create_post_attachment_section.dart';
 
 class CreatePostScreen extends ConsumerStatefulWidget {
   const CreatePostScreen({super.key});
@@ -32,6 +34,16 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
   PostCategory? _selectedCategory;
   bool _localSubmitting = false;
   String? _fieldError;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref
+          .read(createPostControllerProvider.notifier)
+          .hydrateConfirmedDraftIfNeeded();
+    });
+  }
 
   @override
   void dispose() {
@@ -168,6 +180,31 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
     await ref.read(draftRecoveryControllerProvider.notifier).loadNextPage();
   }
 
+  Future<void> _reconcileUploads() async {
+    if (_localSubmitting) {
+      return;
+    }
+    final epochBefore = neighborhoodSessionEpoch(ref);
+    if (epochBefore == null) {
+      return;
+    }
+    setState(() => _localSubmitting = true);
+    final result =
+        await ref
+            .read(createPostControllerProvider.notifier)
+            .reconcileUploadsFromServer();
+    if (!mounted) {
+      return;
+    }
+    if (neighborhoodSessionEpoch(ref) != epochBefore) {
+      ref.read(createPostControllerProvider.notifier).releaseStaleSubmitUi();
+      setState(() => _localSubmitting = false);
+      return;
+    }
+    setState(() => _localSubmitting = false);
+    await _handleSendResult(context, result);
+  }
+
   Future<void> _linkRecoveryCandidate(int postId) async {
     if (_localSubmitting) {
       return;
@@ -293,6 +330,47 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
       case CreatePostSendNoSession():
         ref.read(createPostControllerProvider.notifier).releaseStaleSubmitUi();
         break;
+      case CreatePostSendAttachmentsBlocked(:final message):
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      case CreatePostSendUploadFailure(:final failure):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'No pudimos subir un adjunto: ${failure.userMessage}',
+            ),
+          ),
+        );
+      case CreatePostSendUploadUncertain(:final draftId):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Un adjunto del borrador #$draftId quedó con resultado incierto. '
+              'Solo una subida con respuesta HTTP 201 confirma el archivo. '
+              'El envío a moderación sigue bloqueado.',
+            ),
+          ),
+        );
+      case CreatePostSendReconcileInconclusive(:final draftId):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Consultamos el borrador #$draftId, pero no hay evidencia suficiente '
+              'para cerrar la subida incierta. El envío sigue bloqueado.',
+            ),
+          ),
+        );
+      case CreatePostSendDraftPending(:final detail):
+        ref.read(createPostControllerProvider.notifier).resetAfterSuccess();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'La publicación #${detail.id} ya está en moderación. '
+              'No se subirán adjuntos ni se reenviará desde aquí.',
+            ),
+          ),
+        );
     }
   }
 
@@ -301,6 +379,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
     final workflow = ref.watch(createPostControllerProvider);
     final sessionFlags = ref.watch(createPostSessionPersistenceProvider);
     final recovery = ref.watch(draftRecoveryControllerProvider);
+    final attachmentsState = ref.watch(createPostAttachmentsProvider);
     final groupsAsync = ref.watch(myGroupsControllerProvider);
     final categoriesAsync = ref.watch(postCategoriesProvider);
     final theme = Theme.of(context);
@@ -311,7 +390,9 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
     final blocksFullSend =
         sessionFlags.blocksFullSend || workflow.blocksFullSend;
     final busy =
-        _localSubmitting || workflow.phase == CreatePostPhase.submitting;
+        _localSubmitting ||
+        workflow.phase == CreatePostPhase.submitting ||
+        attachmentsState.hasUploading;
 
     return Scaffold(
       appBar: AppBar(
@@ -480,6 +561,33 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
             const SizedBox(height: RvSpacing.sm),
             Text(
               _fieldError!,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ],
+          const SizedBox(height: RvSpacing.lg),
+          CreatePostAttachmentSection(busy: busy),
+          if (sessionFlags.hasUnresolvedUncertainUpload ||
+              attachmentsState.hasBlockingUncertain(sessionFlags)) ...[
+            const SizedBox(height: RvSpacing.sm),
+            RvPrimaryButton(
+              label: 'Consultar adjuntos en servidor',
+              icon: Icons.cloud_sync_outlined,
+              onPressed: busy ? null : _reconcileUploads,
+            ),
+            const SizedBox(height: RvSpacing.xs),
+            Text(
+              'Esta consulta actualiza el listado del servidor pero no confirma '
+              'automáticamente subidas inciertas.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+          if (sessionFlags.linkedDraftPending) ...[
+            const SizedBox(height: RvSpacing.sm),
+            Text(
+              'El borrador enlazado ya está en moderación. No puedes enviar ni '
+              'añadir adjuntos desde este formulario.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.error,
               ),

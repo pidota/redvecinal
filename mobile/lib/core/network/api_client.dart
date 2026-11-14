@@ -7,14 +7,15 @@ import 'api_failure.dart';
 import 'session_invalidation_coordinator.dart';
 import 'unauthorized_handler.dart';
 
-final sessionInvalidationCoordinatorProvider = Provider<SessionInvalidationCoordinator>((ref) {
-  return SessionInvalidationCoordinator(() async {
-    final handler = ref.read(unauthorizedHandlerProvider);
-    if (handler != null) {
-      await handler();
-    }
-  });
-});
+final sessionInvalidationCoordinatorProvider =
+    Provider<SessionInvalidationCoordinator>((ref) {
+      return SessionInvalidationCoordinator(() async {
+        final handler = ref.read(unauthorizedHandlerProvider);
+        if (handler != null) {
+          await handler();
+        }
+      });
+    });
 
 final dioProvider = Provider<Dio>((ref) {
   final config = ref.watch(appConfigProvider);
@@ -22,7 +23,8 @@ final dioProvider = Provider<Dio>((ref) {
 
   final dio = Dio(
     BaseOptions(
-      baseUrl: config.hasApiBaseUrl ? config.apiBaseUrl : 'http://invalid.local',
+      baseUrl:
+          config.hasApiBaseUrl ? config.apiBaseUrl : 'http://invalid.local',
       connectTimeout: config.connectTimeout,
       receiveTimeout: config.receiveTimeout,
       headers: const {
@@ -64,7 +66,10 @@ class _UnauthorizedInterceptor extends Interceptor {
   final SessionInvalidationCoordinator _coordinator;
 
   @override
-  void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
     _maybeInvalidateSession(response.requestOptions, response.statusCode);
     handler.next(response);
   }
@@ -130,7 +135,9 @@ ApiFailure mapDioError(DioException error, {required bool loginRequest}) {
   }
 
   if (status == 401) {
-    return loginRequest ? const ApiInvalidCredentialsFailure() : const ApiSessionExpiredFailure();
+    return loginRequest
+        ? const ApiInvalidCredentialsFailure()
+        : const ApiSessionExpiredFailure();
   }
 
   if (status == 403) {
@@ -147,6 +154,14 @@ ApiFailure mapDioError(DioException error, {required bool loginRequest}) {
     return ApiConflictFailure(message);
   }
 
+  if (status == 413) {
+    final message = _extractMessage(response.data);
+    return ApiValidationFailure(
+      const {},
+      message ?? 'El archivo excede el tamaño permitido.',
+    );
+  }
+
   if (status == 422) {
     final fieldErrors = _extractValidationErrors(response.data);
     final message = _extractMessage(response.data);
@@ -154,7 +169,9 @@ ApiFailure mapDioError(DioException error, {required bool loginRequest}) {
   }
 
   if (status == 429) {
-    return ApiRateLimitedFailure(retryAfter: _parseRetryAfter(response.headers));
+    return ApiRateLimitedFailure(
+      retryAfter: _parseRetryAfter(response.headers),
+    );
   }
 
   return const ApiUnexpectedFailure();
