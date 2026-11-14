@@ -1,5 +1,7 @@
 import 'package:red_vecinal/features/posts/data/models/feed_post.dart';
 import 'package:red_vecinal/features/posts/data/models/paginated_feed_posts.dart';
+import 'package:red_vecinal/features/posts/data/models/paginated_post_comments.dart';
+import 'package:red_vecinal/features/posts/data/models/post_comment.dart';
 import 'package:red_vecinal/features/posts/data/models/post_detail.dart';
 import 'package:red_vecinal/features/posts/data/post_repository.dart';
 
@@ -12,6 +14,7 @@ Map<String, dynamic> sampleCommunityPostJson({
     'id': id,
     'post_kind': 'community',
     'status': 'published',
+    'comments_enabled': true,
     'published_at': '2026-11-14T12:00:00+00:00',
     'author': {'id': 10, 'name': 'María Vecina'},
     'neighborhood_group': {
@@ -56,6 +59,7 @@ Map<String, dynamic> sampleMunicipalPostJson({int id = 9}) {
     'id': id,
     'post_kind': 'municipal',
     'status': 'published',
+    'comments_enabled': true,
     'published_at': '2026-11-10T09:00:00+00:00',
     'author': {'id': 3, 'name': 'Municipalidad'},
     'neighborhood_group': null,
@@ -94,6 +98,42 @@ PostDetail sampleCommunityPostDetail({int id = 1}) =>
 PostDetail sampleMunicipalPostDetail({int id = 9}) =>
     PostDetail.fromJson(sampleMunicipalPostJson(id: id));
 
+Map<String, dynamic> sampleCommentJson({
+  int id = 100,
+  int postId = 1,
+  String body = 'Gracias por el aviso.',
+  String? authorName,
+}) {
+  return {
+    'id': id,
+    'post_id': postId,
+    'municipality_id': 1,
+    'author_id': 44,
+    'author': {'id': 44, 'name': authorName ?? 'Pedro Vecino'},
+    'body': body,
+    'status': 'visible',
+    'created_at': '2026-11-14T13:00:00+00:00',
+    'updated_at': '2026-11-14T13:00:00+00:00',
+  };
+}
+
+PostComment sampleComment({int id = 100, int postId = 1, String? body}) =>
+    PostComment.fromJson(
+      sampleCommentJson(id: id, postId: postId, body: body ?? 'Gracias por el aviso.'),
+    );
+
+PaginatedPostComments sampleCommentsPage({
+  List<PostComment>? items,
+  int currentPage = 1,
+  int lastPage = 1,
+}) {
+  return PaginatedPostComments(
+    items: items ?? [sampleComment()],
+    currentPage: currentPage,
+    lastPage: lastPage,
+  );
+}
+
 class FakePostGateway implements PostGateway {
   FakePostGateway({
     PaginatedFeedPosts? feedPage,
@@ -108,6 +148,13 @@ class FakePostGateway implements PostGateway {
     this.attachmentBytesById,
     this.downloadFailure,
     this.downloadDelayMs = 0,
+    this.commentsByPostId,
+    this.commentsFailureByPostId,
+    this.commentsDelayMs = 0,
+    this.createCommentFailureByPostId,
+    this.createCommentDelayMs = 0,
+    this.createdCommentByPostId,
+    this.commentPagesByPostId,
   }) : feedPage =
            feedPage ??
            PaginatedFeedPosts(
@@ -128,8 +175,19 @@ class FakePostGateway implements PostGateway {
   Map<int, List<int>>? attachmentBytesById;
   Object? downloadFailure;
   int downloadDelayMs;
+  Map<int, PaginatedPostComments>? commentsByPostId;
+  Map<int, Object?>? commentsFailureByPostId;
+  int commentsDelayMs;
+  Map<int, Object?>? createCommentFailureByPostId;
+  int createCommentDelayMs;
+  Map<int, PostComment Function(String body)>? createdCommentByPostId;
+  Map<int, Map<int, PaginatedPostComments>>? commentPagesByPostId;
+
   int detailCallCount = 0;
   int downloadCallCount = 0;
+  int listCommentsCallCount = 0;
+  int createCommentCallCount = 0;
+  final List<String> createCommentBodies = [];
 
   @override
   Future<PaginatedFeedPosts> listPosts({
@@ -198,5 +256,68 @@ class FakePostGateway implements PostGateway {
       return bytes;
     }
     return [0x25, 0x50, 0x44, 0x46];
+  }
+
+  @override
+  Future<PaginatedPostComments> listComments({
+    required int postId,
+    int page = 1,
+  }) async {
+    listCommentsCallCount++;
+    if (commentsDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: commentsDelayMs));
+    }
+    final failure = commentsFailureByPostId?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    final pagesForPost = commentPagesByPostId?[postId];
+    if (pagesForPost != null) {
+      return pagesForPost[page] ??
+          PaginatedPostComments(
+            items: const [],
+            currentPage: page,
+            lastPage: pagesForPost.values.first.lastPage,
+          );
+    }
+    final pageData = commentsByPostId?[postId];
+    if (pageData != null) {
+      if (page > 1) {
+        return PaginatedPostComments(
+          items: const [],
+          currentPage: page,
+          lastPage: pageData.lastPage,
+        );
+      }
+      return pageData;
+    }
+    return sampleCommentsPage();
+  }
+
+  @override
+  Future<PostComment> createComment({
+    required int postId,
+    required String body,
+  }) async {
+    createCommentCallCount++;
+    createCommentBodies.add(body);
+    if (createCommentDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: createCommentDelayMs));
+    }
+    final failure = createCommentFailureByPostId?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    final factory = createdCommentByPostId?[postId];
+    if (factory != null) {
+      return factory(body);
+    }
+    return PostComment.fromJson({
+      ...sampleCommentJson(
+        id: 200 + createCommentCallCount,
+        postId: postId,
+        body: body,
+      ),
+    });
   }
 }

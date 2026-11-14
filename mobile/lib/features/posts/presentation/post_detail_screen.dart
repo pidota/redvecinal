@@ -11,6 +11,7 @@ import '../../neighborhoods/presentation/widgets/neighborhood_api_error.dart';
 import '../application/post_detail_controller.dart';
 import '../data/models/post_detail.dart';
 import 'widgets/post_attachment_list.dart';
+import 'widgets/post_comments_section.dart';
 import 'widgets/post_detail_body.dart';
 
 class PostDetailScreen extends ConsumerWidget {
@@ -139,22 +140,22 @@ class _PostDetailContent extends ConsumerWidget {
               const SizedBox(height: RvSpacing.md),
               PostDetailBody(text: detail.bodyDisplay),
               const SizedBox(height: RvSpacing.md),
-              Row(
+              Wrap(
+                spacing: RvSpacing.md,
+                runSpacing: RvSpacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Icon(
                     Icons.chat_bubble_outline,
                     size: 18,
                     color: theme.colorScheme.primary,
                   ),
-                  const SizedBox(width: RvSpacing.xs),
                   Text('${detail.engagement.commentsCount} comentarios'),
-                  const SizedBox(width: RvSpacing.md),
                   Icon(
                     Icons.favorite_border,
                     size: 18,
                     color: theme.colorScheme.primary,
                   ),
-                  const SizedBox(width: RvSpacing.xs),
                   Text('${detail.engagement.reactionsCount} reacciones'),
                 ],
               ),
@@ -185,6 +186,8 @@ class _PostDetailContent extends ConsumerWidget {
             );
           },
         ),
+        const SizedBox(height: RvSpacing.md),
+        PostCommentsSection(postId: postId, detail: detail),
       ],
     );
   }

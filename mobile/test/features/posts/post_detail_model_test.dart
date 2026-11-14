@@ -9,6 +9,7 @@ void main() {
     expect(detail.postKind, 'community');
     expect(detail.neighborhoodGroup?.name, 'Junta Centro');
     expect(detail.content?.body, contains('reunión'));
+    expect(detail.commentsEnabled, isTrue);
     expect(detail.attachments, hasLength(1));
     expect(
       detail.attachments.first.downloadUrl,

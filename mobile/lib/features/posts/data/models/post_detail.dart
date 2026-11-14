@@ -106,6 +106,7 @@ class PostDetail {
     required this.content,
     required this.engagement,
     required this.attachments,
+    required this.commentsEnabled,
   });
 
   factory PostDetail.fromJson(Map<String, dynamic> json) {
@@ -121,6 +122,7 @@ class PostDetail {
       id: json['id'] as int,
       postKind: json['post_kind'] as String,
       status: json['status'] as String,
+      commentsEnabled: json['comments_enabled'] as bool? ?? true,
       publishedAt: _parseDateTime(json['published_at'] as String?),
       author:
           authorRaw is Map<String, dynamic>
@@ -159,6 +161,7 @@ class PostDetail {
   final int id;
   final String postKind;
   final String status;
+  final bool commentsEnabled;
   final DateTime? publishedAt;
   final FeedPostAuthor author;
   final FeedPostGroupRef? neighborhoodGroup;
@@ -169,6 +172,8 @@ class PostDetail {
   final List<PostAttachment> attachments;
 
   bool get isMunicipal => postKind == 'municipal';
+
+  bool get isPublished => status == 'published';
 
   String get scopeLabel {
     if (isMunicipal) {
