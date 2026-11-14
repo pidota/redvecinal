@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domains\Posts\Enums\PostCommentStatus;
 use App\Domains\Posts\Models\Post;
-use App\Domains\Posts\Models\PostComment;
 use App\Domains\Posts\Services\AddCommentService;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\PostCommentResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -19,11 +20,12 @@ class PostCommentController extends Controller
         }
 
         $comments = $post->comments()
-            ->where('status', 'visible')
+            ->with(['author:id,name'])
+            ->where('status', PostCommentStatus::Visible)
             ->orderBy('created_at')
             ->paginate();
 
-        return response()->json($comments);
+        return PostCommentResource::collection($comments)->response();
     }
 
     public function store(Request $request, Post $post, AddCommentService $add): JsonResponse
@@ -35,7 +37,10 @@ class PostCommentController extends Controller
         ]);
 
         $comment = $add->execute($post, $request->user(), $data['body']);
+        $comment->load(['author:id,name']);
 
-        return response()->json($comment, 201);
+        return PostCommentResource::make($comment)
+            ->response()
+            ->setStatusCode(201);
     }
 }

@@ -80,3 +80,52 @@ Cada adjunto en JSON:
 ```
 
 **Compatibilidad:** cambios aditivos; clientes que ignoran claves nuevas siguen funcionando. Paginación Laravel sin cambios (`data`, `links`, `meta`).
+
+### Comentarios (engagement)
+
+Rutas Sanctum obligatorio. Autorización de lectura: `PostPolicy::view` (post invisible → **404**). Escritura: `PostPolicy::comment` (fallo → **403**).
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/api/v1/posts/{post}/comments` | Lista paginada de comentarios `visible`, orden `created_at` ascendente |
+| `POST` | `/api/v1/posts/{post}/comments` | Crea comentario visible (`AddCommentService`) |
+
+**GET — paginación:** respuesta estándar Laravel (`data`, `links`, `meta`; tamaño de página por defecto del framework).
+
+**Elemento en `data` (`PostCommentResource`):**
+
+```json
+{
+  "id": 15,
+  "post_id": 1,
+  "municipality_id": 1,
+  "author_id": 10,
+  "author": { "id": 10, "name": "María" },
+  "body": "Texto del comentario",
+  "status": "visible",
+  "created_at": "2026-11-14T12:00:00+00:00",
+  "updated_at": "2026-11-14T12:00:00+00:00"
+}
+```
+
+- `author` incluye solo `id` y `name` (sin email ni datos sensibles).
+- Se conservan `post_id`, `municipality_id`, `author_id` y `status` por compatibilidad con el contrato plano anterior.
+- Solo se listan comentarios con `status = visible`.
+
+**POST — cuerpo:**
+
+```json
+{ "body": "Texto requerido, máximo 5000 caracteres" }
+```
+
+**POST — respuesta:** **201** con un único objeto bajo `data` (mismo esquema que arriba; el autor va precargado).
+
+**Errores esperados:**
+
+| Código | Situación |
+|--------|-----------|
+| **401** | Sin token |
+| **403** | Sin permiso `comment` (`authorize`) |
+| **422** | Validación de `body` o regla de dominio posts (`PostDomainException` → JSON `{ "message" }`) |
+| **404** | Sin permiso `view` del post |
+Los contadores `engagement.comments_count` en `PostResource` siguen contando solo comentarios visibles.

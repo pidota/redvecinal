@@ -31,4 +31,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json(['message' => $e->getMessage()], $e->httpStatus);
             }
         });
+
+        $exceptions->render(function (\App\Domains\Posts\Exceptions\PostDomainException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        });
     })->create();
