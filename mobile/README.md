@@ -131,6 +131,16 @@ flutter analyze
 flutter test
 ```
 
+### Integración continua (GitHub Actions)
+
+En cada **push** o **pull request** hacia `main`, el workflow **Flutter tests** (`.github/workflows/flutter-tests.yml`) ejecuta en `ubuntu-latest` con **Flutter 3.29.2** (stable):
+
+1. `flutter pub get`
+2. `flutter analyze`
+3. `flutter test`
+
+Solo pruebas unitarias y de widgets; sin emulador Android, sin compilación APK ni despliegue.
+
 ### Validación REST local (5.2B)
 
 Scripts **solo desarrollo**: no ejecutar contra producción. El usuario de prueba usa correo `flutter-e2e-*@red-vecinal.test` y contraseña aleatoria (nunca credenciales reales).
