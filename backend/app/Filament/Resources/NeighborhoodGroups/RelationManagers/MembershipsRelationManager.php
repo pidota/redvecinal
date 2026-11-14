@@ -4,6 +4,7 @@ namespace App\Filament\Resources\NeighborhoodGroups\RelationManagers;
 
 use App\Domains\Neighborhoods\Enums\MembershipRole;
 use App\Domains\Neighborhoods\Enums\MembershipStatus;
+use App\Domains\Neighborhoods\Exceptions\NeighborhoodDomainException;
 use App\Domains\Neighborhoods\Models\GroupMember;
 use App\Domains\Neighborhoods\Services\AddGroupMemberService;
 use App\Domains\Neighborhoods\Services\ApproveGroupMemberService;
@@ -29,6 +30,8 @@ class MembershipsRelationManager extends RelationManager
 
     protected static ?string $title = 'Integrantes';
 
+    protected static ?string $description = 'Membresías creadas o gestionadas desde este panel (incorporación manual). No incluye solicitudes enviadas por la app móvil.';
+
     public function form(Schema $schema): Schema
     {
         return $schema
@@ -50,6 +53,11 @@ class MembershipsRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('id')
+            ->heading('Integrantes de la junta (panel municipal)')
+            ->description(
+                'Listado de membresías en esta junta. El estado «Pendiente (panel)» corresponde a una incorporación manual '
+                .'esperando aprobación aquí. Las solicitudes de la app móvil se consultan en la pestaña «Solicitudes de incorporación».'
+            )
             ->modifyQueryUsing(fn ($query) => $query->with(['user', 'approver']))
             ->columns([
                 TextColumn::make('user.name')->label('Nombre'),
@@ -65,7 +73,7 @@ class MembershipsRelationManager extends RelationManager
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (MembershipStatus $state) => match ($state) {
-                        MembershipStatus::Pending => 'Pendiente',
+                        MembershipStatus::Pending => 'Pendiente (panel)',
                         MembershipStatus::Active => 'Activo',
                         MembershipStatus::Rejected => 'Rechazado',
                         MembershipStatus::Suspended => 'Suspendido',
@@ -93,8 +101,16 @@ class MembershipsRelationManager extends RelationManager
                     ->authorize(fn (): bool => auth()->user()->can('create', [GroupMember::class, $this->getOwnerRecord()]))
                     ->action(function (array $data, AddGroupMemberService $service): void {
                         $user = User::query()->findOrFail($data['user_id']);
-                        $service->execute($this->getOwnerRecord(), $user, Filament::auth()->user());
-                        Notification::make()->title('Integrante agregado')->success()->send();
+
+                        try {
+                            $service->execute($this->getOwnerRecord(), $user, Filament::auth()->user());
+                            Notification::make()
+                                ->title('Integrante agregado (membresía pendiente de aprobación en panel)')
+                                ->success()
+                                ->send();
+                        } catch (NeighborhoodDomainException $e) {
+                            $this->notifyIncorporationConflict($e);
+                        }
                     }),
                 Action::make('createUser')
                     ->label('Crear usuario e incorporar')
@@ -110,27 +126,35 @@ class MembershipsRelationManager extends RelationManager
                             'email' => $data['email'],
                             'password' => Hash::make($data['password']),
                         ]);
-                        $service->execute($this->getOwnerRecord(), $user, Filament::auth()->user());
-                        Notification::make()->title('Usuario creado e incorporado')->success()->send();
+
+                        try {
+                            $service->execute($this->getOwnerRecord(), $user, Filament::auth()->user());
+                            Notification::make()
+                                ->title('Usuario creado con membresía pendiente de aprobación en panel')
+                                ->success()
+                                ->send();
+                        } catch (NeighborhoodDomainException $e) {
+                            $this->notifyIncorporationConflict($e);
+                        }
                     }),
             ])
             ->recordActions([
                 Action::make('approve')
-                    ->label('Aprobar')
+                    ->label('Aprobar incorporación (panel)')
                     ->visible(fn (GroupMember $record): bool => $record->status === MembershipStatus::Pending)
                     ->authorize(fn (GroupMember $record): bool => auth()->user()->can('approve', $record))
                     ->action(function (GroupMember $record, ApproveGroupMemberService $service): void {
                         $service->execute($record, Filament::auth()->user());
-                        Notification::make()->title('Solicitud aprobada')->success()->send();
+                        Notification::make()->title('Membresía del panel aprobada')->success()->send();
                     }),
                 Action::make('reject')
-                    ->label('Rechazar')
+                    ->label('Rechazar incorporación (panel)')
                     ->color('danger')
                     ->visible(fn (GroupMember $record): bool => $record->status === MembershipStatus::Pending)
                     ->authorize(fn (GroupMember $record): bool => auth()->user()->can('reject', $record))
                     ->action(function (GroupMember $record, RejectGroupMemberService $service): void {
                         $service->execute($record, Filament::auth()->user());
-                        Notification::make()->title('Solicitud rechazada')->success()->send();
+                        Notification::make()->title('Membresía del panel rechazada')->success()->send();
                     }),
                 Action::make('suspend')
                     ->label('Suspender')
@@ -161,5 +185,19 @@ class MembershipsRelationManager extends RelationManager
                         Notification::make()->title('Presidente asignado')->success()->send();
                     }),
             ]);
+    }
+
+    private function notifyIncorporationConflict(NeighborhoodDomainException $exception): void
+    {
+        $body = str_contains($exception->getMessage(), 'app móvil')
+            ? 'Este vecino tiene una solicitud de incorporación pendiente en la app móvil para esta junta. '
+                .'Revise la pestaña «Solicitudes de incorporación». La decisión debe tomarse desde la aplicación móvil o esperando a que el vecino cancele la solicitud.'
+            : $exception->getMessage();
+
+        Notification::make()
+            ->title('No se pudo incorporar desde el panel')
+            ->body($body)
+            ->danger()
+            ->send();
     }
 }

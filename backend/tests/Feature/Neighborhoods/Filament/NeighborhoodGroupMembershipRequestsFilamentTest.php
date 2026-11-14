@@ -284,6 +284,6 @@ class NeighborhoodGroupMembershipRequestsFilamentTest extends TestCase
             'pageClass' => EditNeighborhoodGroup::class,
         ])
             ->assertSuccessful()
-            ->assertSee('Sin solicitudes para mostrar');
+            ->assertSee('Sin solicitudes móviles con este filtro');
     }
 }

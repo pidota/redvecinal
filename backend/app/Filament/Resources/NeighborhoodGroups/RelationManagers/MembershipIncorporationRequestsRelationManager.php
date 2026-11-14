@@ -22,6 +22,8 @@ class MembershipIncorporationRequestsRelationManager extends RelationManager
 
     protected static ?string $pluralModelLabel = 'solicitudes de incorporación';
 
+    protected static ?string $description = 'Solo consulta. Origen: app móvil. Para incorporación manual use la pestaña Integrantes.';
+
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
         $user = Filament::auth()->user();
@@ -72,10 +74,10 @@ class MembershipIncorporationRequestsRelationManager extends RelationManager
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (MembershipRequestStatus $state): string => match ($state) {
-                        MembershipRequestStatus::Pending => 'Pendiente',
-                        MembershipRequestStatus::Approved => 'Aprobada',
-                        MembershipRequestStatus::Rejected => 'Rechazada',
-                        MembershipRequestStatus::Cancelled => 'Cancelada',
+                        MembershipRequestStatus::Pending => 'Pendiente (app móvil)',
+                        MembershipRequestStatus::Approved => 'Aprobada (app móvil)',
+                        MembershipRequestStatus::Rejected => 'Rechazada (app móvil)',
+                        MembershipRequestStatus::Cancelled => 'Cancelada (vecino)',
                     }),
                 TextColumn::make('resolved_at')
                     ->label('Fecha de resolución')
@@ -104,10 +106,10 @@ class MembershipIncorporationRequestsRelationManager extends RelationManager
             ->headerActions([])
             ->recordActions([])
             ->toolbarActions([])
-            ->emptyStateHeading('Sin solicitudes para mostrar')
+            ->emptyStateHeading('Sin solicitudes móviles con este filtro')
             ->emptyStateDescription(
-                'No hay solicitudes de incorporación móvil con el filtro actual. '
-                .'Los vecinos envían estas solicitudes desde la app; para incorporar manualmente use la pestaña Integrantes.'
+                'Esto no significa que la junta no tenga integrantes: consulte la pestaña Integrantes para membresías del panel. '
+                .'Aquí solo se listan solicitudes enviadas desde la app móvil.'
             );
     }
 }
