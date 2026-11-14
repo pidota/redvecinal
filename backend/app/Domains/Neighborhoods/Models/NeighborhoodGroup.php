@@ -53,6 +53,11 @@ class NeighborhoodGroup extends Model
         return $this->hasMany(GroupMember::class, 'neighborhood_group_id');
     }
 
+    public function membershipRequests(): HasMany
+    {
+        return $this->hasMany(NeighborhoodMembershipRequest::class, 'neighborhood_group_id');
+    }
+
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'group_members', 'neighborhood_group_id', 'user_id')

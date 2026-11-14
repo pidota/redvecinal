@@ -6,6 +6,7 @@ use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
 use App\Filament\Resources\NeighborhoodGroups\Pages\CreateNeighborhoodGroup;
 use App\Filament\Resources\NeighborhoodGroups\Pages\EditNeighborhoodGroup;
 use App\Filament\Resources\NeighborhoodGroups\Pages\ListNeighborhoodGroups;
+use App\Filament\Resources\NeighborhoodGroups\RelationManagers\MembershipIncorporationRequestsRelationManager;
 use App\Filament\Resources\NeighborhoodGroups\RelationManagers\MembershipsRelationManager;
 use App\Filament\Resources\NeighborhoodGroups\Schemas\NeighborhoodGroupForm;
 use App\Filament\Resources\NeighborhoodGroups\Tables\NeighborhoodGroupsTable;
@@ -46,6 +47,7 @@ class NeighborhoodGroupResource extends Resource
     {
         return [
             MembershipsRelationManager::class,
+            MembershipIncorporationRequestsRelationManager::class,
         ];
     }
 
