@@ -6,10 +6,16 @@ import '../../data/models/feed_post.dart';
 import '../../data/models/feed_post_mine_presentation.dart';
 
 class MyPostListCard extends StatelessWidget {
-  const MyPostListCard({required this.post, required this.onOpen, super.key});
+  const MyPostListCard({
+    required this.post,
+    required this.onOpen,
+    this.onEdit,
+    super.key,
+  });
 
   final FeedPost post;
   final VoidCallback onOpen;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +85,18 @@ class MyPostListCard extends StatelessWidget {
               style: theme.textTheme.bodyMedium,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          if (onEdit != null &&
+              FeedPostMinePresentation.canEditFromList(post)) ...[
+            const SizedBox(height: RvSpacing.sm),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: Text(post.status == 'rejected' ? 'Corregir' : 'Editar'),
+              ),
             ),
           ],
         ],

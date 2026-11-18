@@ -206,6 +206,13 @@ class FakePostGateway implements PostGateway {
     this.uploadFailureByPostId,
     this.uploadThrowsUncertain = false,
     this.uploadDelayMs = 0,
+    this.updateFailureByPostId,
+    this.updateDelayMs = 0,
+    this.updateThrowsUncertain = false,
+    this.submitThrowsUncertain = false,
+    this.onUpdatePost,
+    this.updatedDetailByPostId,
+    this.submittedDetailByPostId,
   }) : feedPage =
            feedPage ??
            PaginatedFeedPosts(
@@ -259,6 +266,14 @@ class FakePostGateway implements PostGateway {
   Map<int, Object?>? uploadFailureByPostId;
   bool uploadThrowsUncertain;
   int uploadDelayMs;
+  Map<int, Object?>? updateFailureByPostId;
+  int updateDelayMs;
+  bool updateThrowsUncertain;
+  bool submitThrowsUncertain;
+  void Function(int postId, int categoryId, String title, String body)?
+  onUpdatePost;
+  Map<int, PostDetail>? updatedDetailByPostId;
+  Map<int, PostDetail>? submittedDetailByPostId;
 
   int detailCallCount = 0;
   int uploadCallCount = 0;
@@ -271,6 +286,7 @@ class FakePostGateway implements PostGateway {
   int listCategoriesCallCount = 0;
   int createPostCallCount = 0;
   int submitPostCallCount = 0;
+  int updatePostCallCount = 0;
   int listMyPostsCallCount = 0;
   final List<String> createCommentBodies = [];
   final List<Map<String, dynamic>> createPostPayloads = [];
@@ -535,13 +551,111 @@ class FakePostGateway implements PostGateway {
       throw failure;
     }
     final id = 7000 + uploadCallCount;
-    return PostAttachmentUploadResult(
+    final result = PostAttachmentUploadResult(
       id: id,
       revisionId: revisionId,
       originalDisplayName: filename,
       mimeType: mimeType,
       sizeBytes: 1200,
     );
+    final existing = detailById?[postId];
+    if (existing != null) {
+      final json = Map<String, dynamic>.from(
+        sampleCommunityPostJson(id: postId),
+      );
+      json['status'] = existing.status;
+      json['content'] = null;
+      json['working_content'] = {
+        'revision_id':
+            existing.editableRevisionId ?? revisionId,
+        'title': existing.workingContent?.title ?? 'T',
+        'body': existing.workingContent?.body ?? 'B',
+      };
+      final prior =
+          existing.attachments
+              .where((a) => a.revisionId == revisionId)
+              .map(
+                (a) => {
+                  'id': a.id,
+                  'revision_id': a.revisionId,
+                  'original_display_name': a.originalDisplayName,
+                  'mime_type': a.mimeType,
+                  'size_bytes': a.sizeBytes,
+                  'download_url': a.downloadUrl,
+                },
+              )
+              .toList();
+      prior.add({
+        'id': id,
+        'revision_id': revisionId,
+        'original_display_name': filename,
+        'mime_type': mimeType,
+        'size_bytes': result.sizeBytes,
+        'download_url': '/api/v1/posts/$postId/attachments/$id',
+      });
+      json['attachments'] = prior;
+      json['category_id'] = existing.category?.id ?? 2;
+      detailById![postId] = PostDetail.fromJson(json);
+    }
+    return result;
+  }
+
+  @override
+  Future<PostDetail> updatePost({
+    required int postId,
+    required int categoryId,
+    required String title,
+    required String body,
+  }) async {
+    updatePostCallCount++;
+    if (updateDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: updateDelayMs));
+    }
+    if (updateThrowsUncertain) {
+      throw Exception('timeout simulado');
+    }
+    final failure = updateFailureByPostId?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    onUpdatePost?.call(postId, categoryId, title, body);
+    final preset = updatedDetailByPostId?[postId];
+    if (preset != null) {
+      detailById ??= {};
+      detailById![postId] = preset;
+      return preset;
+    }
+    final existing =
+        detailById?[postId] ??
+        draftPostDetail(
+          id: postId,
+          groupId: 2,
+          categoryId: categoryId,
+          title: title,
+          body: body,
+        );
+    final revisionId = existing.editableRevisionId ?? postId * 10;
+    final next =
+        existing.status == 'rejected'
+            ? rejectedPostDetail(
+              id: postId,
+              groupId: existing.neighborhoodGroup?.id ?? 2,
+              categoryId: categoryId,
+              title: title,
+              body: body,
+              revisionId: revisionId,
+            )
+            : draftPostDetail(
+              id: postId,
+              groupId: existing.neighborhoodGroup?.id ?? 2,
+              categoryId: categoryId,
+              title: title,
+              body: body,
+              revisionId: revisionId,
+            );
+    detailById ??= {};
+    detailById![postId] = next;
+    return next;
   }
 
   @override
@@ -550,18 +664,29 @@ class FakePostGateway implements PostGateway {
     if (submitPostDelayMs > 0) {
       await Future<void>.delayed(Duration(milliseconds: submitPostDelayMs));
     }
+    if (submitThrowsUncertain) {
+      throw Exception('submit timeout simulado');
+    }
     final failure = submitFailureByPostId?[postId];
     if (failure != null) {
       throw failure;
     }
     onSubmitPost?.call(postId);
-    final pending = detailById?[postId];
-    if (pending != null) {
-      final json = Map<String, dynamic>.from(
-        sampleCommunityPostJson(id: postId),
+    final preset = submittedDetailByPostId?[postId];
+    if (preset != null) {
+      detailById ??= {};
+      detailById![postId] = preset;
+      return preset;
+    }
+    final existing = detailById?[postId];
+    if (existing != null) {
+      final next = pendingPostDetail(
+        id: postId,
+        title: existing.workingContent?.title ?? 'T',
+        body: existing.workingContent?.body ?? 'B',
       );
-      json['status'] = 'pending';
-      return PostDetail.fromJson(json);
+      detailById![postId] = next;
+      return next;
     }
     return pendingPostDetail(id: postId);
   }
@@ -598,6 +723,8 @@ PostDetail draftPostDetail({
   required int categoryId,
   required String title,
   required String body,
+  int? revisionId,
+  List<Map<String, dynamic>>? attachments,
 }) {
   final json = Map<String, dynamic>.from(sampleCommunityPostJson(id: id));
   json['status'] = 'draft';
@@ -605,11 +732,36 @@ PostDetail draftPostDetail({
   json['category_id'] = categoryId;
   json['published_at'] = null;
   json['content'] = null;
+  final rev = revisionId ?? id * 10;
+  json['attachments'] = attachments ?? [];
+  json['working_content'] = {'revision_id': rev, 'title': title, 'body': body};
+  return PostDetail.fromJson(json);
+}
+
+PostDetail rejectedPostDetail({
+  required int id,
+  required int groupId,
+  required int categoryId,
+  required String title,
+  required String body,
+  int? revisionId,
+}) {
+  final json = Map<String, dynamic>.from(sampleCommunityPostJson(id: id));
+  json['status'] = 'rejected';
+  json['neighborhood_group_id'] = groupId;
+  json['category_id'] = categoryId;
+  json['published_at'] = null;
+  json['content'] = null;
   json['attachments'] = [];
   json['working_content'] = {
-    'revision_id': id * 10,
+    'revision_id': revisionId ?? id * 10,
     'title': title,
     'body': body,
+  };
+  json['category'] = {
+    'id': categoryId,
+    'slug': 'aviso-comunitario',
+    'name': 'Aviso comunitario',
   };
   return PostDetail.fromJson(json);
 }

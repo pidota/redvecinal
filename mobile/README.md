@@ -181,6 +181,22 @@ flutter build apk --debug
 
 Ajuste la ruta según su instalación. No se descargan JDK automáticamente desde el repo.
 
+## Fase 5.4F-4C — Edición de publicaciones propias
+
+Flujo en app: **Mis publicaciones** (ruta `go_router` `/posts/mine`) → editor `/posts/:id/edit` → PATCH contenido → adjuntos (`revision_id` en multipart) → submit a moderación (borrador o rechazada).
+
+Contratos API usados por el cliente (base `API_BASE_URL` = `…/api/v1`):
+
+| Acción | Método y ruta |
+|--------|----------------|
+| Detalle | `GET /posts/{id}` |
+| Mis publicaciones | **`GET /me/posts`** (paginado; no usar `/posts/mine` como endpoint REST) |
+| Guardar contenido | `PATCH /posts/{id}` |
+| Adjuntar archivo | `POST /posts/{id}/attachments` (`revision_id` + `file`) |
+| Enviar a moderación | `POST /posts/{id}/submit` (sin body) |
+
+Estados editables en app: `draft` y `rejected`. Tras submit exitoso el post pasa a `pending` y el editor deja de ser editable.
+
 ## Subfases pendientes
 
 | Subfase | Contenido |

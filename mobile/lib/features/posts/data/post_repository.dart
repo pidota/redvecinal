@@ -55,6 +55,13 @@ abstract class PostGateway {
 
   Future<PostDetail> submitPost(int postId);
 
+  Future<PostDetail> updatePost({
+    required int postId,
+    required int categoryId,
+    required String title,
+    required String body,
+  });
+
   Future<PostAttachmentUploadResult> uploadPostAttachment({
     required int postId,
     required int revisionId,
@@ -434,6 +441,42 @@ class PostRepository implements PostGateway {
       final payload = response.data;
       if (status == 201 && payload != null) {
         return PostAttachmentUploadResult.fromJson(payload);
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<PostDetail> updatePost({
+    required int postId,
+    required int categoryId,
+    required String title,
+    required String body,
+  }) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.patch<Map<String, dynamic>>(
+        '/posts/$postId',
+        data: {'category_id': categoryId, 'title': title, 'body': body},
+      );
+
+      final status = response.statusCode ?? 0;
+      final payload = response.data;
+      if (status == 200 && payload != null) {
+        final data = payload['data'];
+        if (data is Map<String, dynamic>) {
+          return PostDetail.fromJson(data);
+        }
+        if (payload.containsKey('id')) {
+          return PostDetail.fromJson(payload);
+        }
       }
 
       throw DioException(

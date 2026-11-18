@@ -5,6 +5,10 @@ import 'feed_post.dart';
 class FeedPostMinePresentation {
   const FeedPostMinePresentation._();
 
+  static bool canEditFromList(FeedPost post) {
+    return post.status == 'draft' || post.status == 'rejected';
+  }
+
   static String statusLabel(String status) {
     switch (status) {
       case 'draft':

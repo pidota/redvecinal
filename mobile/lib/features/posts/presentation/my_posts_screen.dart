@@ -9,6 +9,7 @@ import '../../../shared/widgets/rv_loading_indicator.dart';
 import '../../../shared/widgets/rv_primary_button.dart';
 import '../../neighborhoods/presentation/widgets/neighborhood_api_error.dart';
 import '../application/my_posts_controller.dart';
+import '../data/models/feed_post_mine_presentation.dart';
 import 'widgets/my_post_list_card.dart';
 
 class MyPostsScreen extends ConsumerWidget {
@@ -87,6 +88,10 @@ class MyPostsScreen extends ConsumerWidget {
                   child: MyPostListCard(
                     post: post,
                     onOpen: () => _openDetail(context, ref, post.id),
+                    onEdit:
+                        FeedPostMinePresentation.canEditFromList(post)
+                            ? () => context.push('/posts/${post.id}/edit')
+                            : null,
                   ),
                 );
               },

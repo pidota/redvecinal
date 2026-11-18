@@ -17,6 +17,7 @@ import '../../features/neighborhoods/presentation/neighborhoods_screen.dart';
 import '../../features/neighborhoods/presentation/reviewable_groups_screen.dart';
 import '../../features/posts/presentation/post_detail_invalid_route_screen.dart';
 import '../../features/posts/presentation/create_post_screen.dart';
+import '../../features/posts/presentation/edit_post_screen.dart';
 import '../../features/posts/presentation/my_posts_screen.dart';
 import '../../features/posts/presentation/post_detail_screen.dart';
 import '../../features/posts/presentation/posts_screen.dart';
@@ -170,6 +171,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                       }
                       return PostDetailScreen(postId: id);
                     },
+                    routes: [
+                      GoRoute(
+                        path: 'edit',
+                        parentNavigatorKey: _rootNavigatorKey,
+                        builder: (context, state) {
+                          final raw = state.pathParameters['postId'] ?? '';
+                          final id = int.tryParse(raw);
+                          if (id == null) {
+                            return const PostDetailInvalidRouteScreen();
+                          }
+                          return EditPostScreen(postId: id);
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -16,6 +16,12 @@ import 'widgets/post_comments_section.dart';
 import 'widgets/post_detail_body.dart';
 import 'widgets/post_reaction_control.dart';
 
+bool _canEditDetail(PostDetail detail) {
+  return (detail.status == 'draft' || detail.status == 'rejected') &&
+      detail.workingContent != null &&
+      !detail.isMunicipal;
+}
+
 class PostDetailScreen extends ConsumerWidget {
   const PostDetailScreen({required this.postId, super.key});
 
@@ -30,6 +36,22 @@ class PostDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Publicación'),
         leading: BackButton(onPressed: () => context.pop()),
+        actions: [
+          detailAsync.maybeWhen(
+                data:
+                    (detail) =>
+                        _canEditDetail(detail)
+                            ? IconButton(
+                              tooltip: 'Editar',
+                              icon: const Icon(Icons.edit_outlined),
+                              onPressed:
+                                  () => context.push('/posts/$postId/edit'),
+                            )
+                            : null,
+                orElse: () => null,
+              ) ??
+              const SizedBox.shrink(),
+        ],
       ),
       body: detailAsync.when(
         loading: () => const Center(child: RvLoadingIndicator()),
