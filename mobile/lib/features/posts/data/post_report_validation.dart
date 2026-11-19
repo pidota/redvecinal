@@ -1,4 +1,5 @@
 import '../../../core/network/api_failure.dart';
+import 'post_report_idempotency.dart';
 
 /// Alineado con validación Laravel en `PostReportController`.
 const int postReportReasonCodeMaxLength = 60;
@@ -38,11 +39,49 @@ ApiValidationFailure? validatePostReportInput({
   return null;
 }
 
-/// Tras despachar el POST, timeout, red, 5xx o 201 malformado no demuestran
+/// Tras despachar el POST, timeout, red, 5xx, 429 o 201 malformado no demuestran
 /// que el servidor haya rechazado la creación. No reintentar automáticamente.
 bool isPostReportOutcomeUncertain(ApiFailure failure) {
   return failure is ApiNetworkFailure ||
       failure is ApiTimeoutFailure ||
       failure is ApiServerFailure ||
-      failure is ApiUnexpectedFailure;
+      failure is ApiUnexpectedFailure ||
+      failure is ApiRateLimitedFailure;
+}
+
+const Set<String> kPostReportTrustedValidationFields = {
+  'reason_code',
+  'details',
+  kPostReportIdempotencyHeader,
+};
+
+/// Rechazo **antes** de crear el reporte, con evidencia estructural — no solo el código HTTP.
+///
+/// Laravel 422 de cuerpo trae `errors.reason_code` / `errors.details`.
+/// Clave inválida: campo `Idempotency-Key` o el mensaje fijo del backend.
+/// 401/403/404 ocurren antes del INSERT. Cualquier otra forma (422 genérico, 429, proxy) es incierta.
+bool isPostReportPreCreateRejection(ApiFailure failure) {
+  if (failure is ApiSessionExpiredFailure ||
+      failure is ApiForbiddenFailure ||
+      failure is ApiNotFoundFailure) {
+    return true;
+  }
+  if (failure is! ApiValidationFailure) {
+    return false;
+  }
+  final keys = failure.fieldErrors.keys.toSet();
+  if (keys.isEmpty) {
+    return _isKnownInvalidIdempotencyKeyMessage(failure.userMessage);
+  }
+  return keys.every(kPostReportTrustedValidationFields.contains);
+}
+
+bool _isKnownInvalidIdempotencyKeyMessage(String message) {
+  final normalized = message.toLowerCase();
+  if (!normalized.contains('idempotency-key')) {
+    return false;
+  }
+  return normalized.contains('uuid v4') ||
+      normalized.contains('una sola vez') ||
+      normalized.contains('inválid');
 }

@@ -5,10 +5,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:red_vecinal/core/config/app_config.dart';
 import 'package:red_vecinal/core/network/api_failure.dart';
+import 'package:red_vecinal/features/posts/data/post_report_idempotency.dart';
 import 'package:red_vecinal/features/posts/data/post_report_validation.dart';
 import 'package:red_vecinal/features/posts/data/post_repository.dart';
 
 void main() {
+  const kIdempotencyKey = '550e8400-e29b-41d4-a716-446655440000';
   const config = AppConfig(
     appName: 'Test',
     environment: 'test',
@@ -30,10 +32,11 @@ void main() {
         'POST /posts/7/reports': ok201Response(),
       });
 
-      final result = await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 7, reasonCode: 'spam');
+      final result = await PostRepository(dio, config).reportPost(
+        postId: 7,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
       expect(result.id, 42);
       expect(result.status, 'open');
     });
@@ -50,10 +53,11 @@ void main() {
         ),
       );
 
-      await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 9, reasonCode: 'spam');
+      await PostRepository(dio, config).reportPost(
+        postId: 9,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
     });
 
     test('token mediante cliente existente', () async {
@@ -70,10 +74,11 @@ void main() {
         ),
       );
 
-      await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 1, reasonCode: 'spam');
+      await PostRepository(dio, config).reportPost(
+        postId: 1,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
       expect(calls, 1);
     });
 
@@ -89,10 +94,11 @@ void main() {
         ),
       );
 
-      await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 1, reasonCode: 'spam');
+      await PostRepository(dio, config).reportPost(
+        postId: 1,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
     });
 
     test('reason_code inappropriate en cuerpo', () async {
@@ -107,10 +113,11 @@ void main() {
         ),
       );
 
-      await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 1, reasonCode: 'inappropriate');
+      await PostRepository(dio, config).reportPost(
+        postId: 1,
+        reasonCode: 'inappropriate',
+        idempotencyKey: kIdempotencyKey,
+      );
     });
 
     test('details opcional omitido', () async {
@@ -125,10 +132,11 @@ void main() {
         ),
       );
 
-      await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 1, reasonCode: 'spam');
+      await PostRepository(dio, config).reportPost(
+        postId: 1,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
     });
 
     test('details presente', () async {
@@ -143,10 +151,12 @@ void main() {
         ),
       );
 
-      await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 1, reasonCode: 'spam', details: 'Contenido dudoso');
+      await PostRepository(dio, config).reportPost(
+        postId: 1,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+        details: 'Contenido dudoso',
+      );
     });
 
     test('HTTP 201', () async {
@@ -155,10 +165,11 @@ void main() {
         'POST /posts/3/reports': ok201Response(),
       });
 
-      final result = await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 3, reasonCode: 'spam');
+      final result = await PostRepository(dio, config).reportPost(
+        postId: 3,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
       expect(result.id, greaterThan(0));
     });
 
@@ -172,10 +183,11 @@ void main() {
         ),
       });
 
-      final result = await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 3, reasonCode: 'spam');
+      final result = await PostRepository(dio, config).reportPost(
+        postId: 3,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
       expect(result.id, 99);
     });
 
@@ -189,10 +201,11 @@ void main() {
         ),
       });
 
-      final result = await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 3, reasonCode: 'spam');
+      final result = await PostRepository(dio, config).reportPost(
+        postId: 3,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
       expect(result.status, 'open');
     });
 
@@ -207,7 +220,11 @@ void main() {
       });
 
       await expectLater(
-        PostRepository(dio, config).reportPost(postId: 1, reasonCode: 'spam'),
+        PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
         throwsA(isA<ApiSessionExpiredFailure>()),
       );
     });
@@ -223,7 +240,11 @@ void main() {
       });
 
       await expectLater(
-        PostRepository(dio, config).reportPost(postId: 1, reasonCode: 'spam'),
+        PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
         throwsA(isA<ApiForbiddenFailure>()),
       );
     });
@@ -239,7 +260,11 @@ void main() {
       });
 
       await expectLater(
-        PostRepository(dio, config).reportPost(postId: 8, reasonCode: 'spam'),
+        PostRepository(dio, config).reportPost(
+          postId: 8,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
         throwsA(isA<ApiNotFoundFailure>()),
       );
     });
@@ -260,10 +285,11 @@ void main() {
       });
 
       try {
-        await PostRepository(
-          dio,
-          config,
-        ).reportPost(postId: 1, reasonCode: 'spam');
+        await PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        );
         fail('expected throw');
       } on ApiValidationFailure catch (e) {
         expect(e.fieldErrors.containsKey('reason_code'), isTrue);
@@ -288,10 +314,12 @@ void main() {
       });
 
       try {
-        await PostRepository(
-          dio,
-          config,
-        ).reportPost(postId: 1, reasonCode: 'spam', details: 'ok');
+        await PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+          details: 'ok',
+        );
         fail('expected throw');
       } on ApiValidationFailure catch (e) {
         expect(e.fieldErrors.containsKey('details'), isTrue);
@@ -303,7 +331,11 @@ void main() {
       dio.httpClientAdapter = _TimeoutAdapter();
 
       await expectLater(
-        PostRepository(dio, config).reportPost(postId: 1, reasonCode: 'spam'),
+        PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
         throwsA(isA<ApiTimeoutFailure>()),
       );
     });
@@ -313,7 +345,11 @@ void main() {
       dio.httpClientAdapter = _NetworkErrorAdapter();
 
       await expectLater(
-        PostRepository(dio, config).reportPost(postId: 1, reasonCode: 'spam'),
+        PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
         throwsA(isA<ApiNetworkFailure>()),
       );
     });
@@ -329,7 +365,11 @@ void main() {
       });
 
       await expectLater(
-        PostRepository(dio, config).reportPost(postId: 1, reasonCode: 'spam'),
+        PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
         throwsA(isA<ApiServerFailure>()),
       );
     });
@@ -357,7 +397,11 @@ void main() {
       );
 
       await expectLater(
-        PostRepository(dio, config).reportPost(postId: 1, reasonCode: 'spam'),
+        PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
         throwsA(isA<ApiServerFailure>()),
       );
       expect(calls, 1);
@@ -386,7 +430,11 @@ void main() {
       );
 
       await expectLater(
-        PostRepository(dio, config).reportPost(postId: 1, reasonCode: 'spam'),
+        PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
         throwsA(isA<ApiServerFailure>()),
       );
       expect(calls, 1);
@@ -404,11 +452,57 @@ void main() {
         ),
       );
 
-      await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 2, reasonCode: 'spam');
+      await PostRepository(dio, config).reportPost(
+        postId: 2,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
       expect(calls, 1);
+    });
+
+    test('envía cabecera Idempotency-Key', () async {
+      final dio = _dio(config);
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            expect(
+              options.headers[kPostReportIdempotencyHeader],
+              kIdempotencyKey,
+            );
+            expect(options.headers.containsKey('Idempotency-Key'), isTrue);
+            handler.resolve(ok201Response());
+          },
+        ),
+      );
+
+      await PostRepository(dio, config).reportPost(
+        postId: 1,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
+    });
+
+    test('HTTP 409', () async {
+      final dio = _dio(config);
+      dio.httpClientAdapter = _MapAdapter({
+        'POST /posts/1/reports': Response(
+          requestOptions: RequestOptions(path: '/posts/1/reports'),
+          statusCode: 409,
+          data: {
+            'message':
+                'La clave de idempotencia ya fue usada con otro contenido.',
+          },
+        ),
+      });
+
+      await expectLater(
+        PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
+        throwsA(isA<ApiConflictFailure>()),
+      );
     });
 
     test('ausencia de reporter_id en request', () async {
@@ -424,10 +518,11 @@ void main() {
         ),
       );
 
-      await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 1, reasonCode: 'spam');
+      await PostRepository(dio, config).reportPost(
+        postId: 1,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
     });
 
     test('respuesta sin reporter_id en modelo', () async {
@@ -436,10 +531,11 @@ void main() {
         'POST /posts/1/reports': ok201Response(extra: {'reporter_id': 99}),
       });
 
-      final result = await PostRepository(
-        dio,
-        config,
-      ).reportPost(postId: 1, reasonCode: 'spam');
+      final result = await PostRepository(dio, config).reportPost(
+        postId: 1,
+        reasonCode: 'spam',
+        idempotencyKey: kIdempotencyKey,
+      );
       expect(result.id, 42);
       expect(result.status, 'open');
     });
@@ -455,7 +551,11 @@ void main() {
       });
 
       await expectLater(
-        PostRepository(dio, config).reportPost(postId: 1, reasonCode: 'spam'),
+        PostRepository(dio, config).reportPost(
+          postId: 1,
+          reasonCode: 'spam',
+          idempotencyKey: kIdempotencyKey,
+        ),
         throwsA(isA<ApiUnexpectedFailure>()),
       );
     });
@@ -496,7 +596,20 @@ void main() {
     expect(isPostReportOutcomeUncertain(const ApiTimeoutFailure()), isTrue);
     expect(isPostReportOutcomeUncertain(const ApiServerFailure()), isTrue);
     expect(isPostReportOutcomeUncertain(const ApiUnexpectedFailure()), isTrue);
+    expect(isPostReportOutcomeUncertain(const ApiRateLimitedFailure()), isTrue);
     expect(isPostReportOutcomeUncertain(const ApiForbiddenFailure()), isFalse);
+    expect(
+      isPostReportPreCreateRejection(
+        const ApiValidationFailure({
+          'reason_code': ['inválido'],
+        }),
+      ),
+      isTrue,
+    );
+    expect(
+      isPostReportPreCreateRejection(const ApiValidationFailure({}, 'Error')),
+      isFalse,
+    );
   });
 }
 

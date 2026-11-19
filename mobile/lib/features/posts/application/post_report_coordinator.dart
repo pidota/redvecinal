@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_state.dart';
+import '../data/post_report_idempotency.dart';
 import '../data/post_report_outcome_store.dart';
 import 'post_report_outcome.dart';
 
@@ -26,7 +27,13 @@ class PostReportCoordinatorState {
 /// La clave es usuario + publicación. Un usuario no bloquea a otro.
 /// `confirming` y `persistBlocked` solo viven en memoria.
 /// Tras reinicio, un `inFlight` se trata como `uncertain` (el POST pudo completarse).
+/// No hay replay automático al hidratar.
 class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
+  PostReportCoordinator({String Function()? uuidV4})
+    : _uuidV4 = uuidV4 ?? generatePostReportUuidV4;
+
+  final String Function() _uuidV4;
+
   int _nextGeneration = 1;
   Future<void>? _hydrateFuture;
   Future<bool> _persistChain = Future<bool>.value(true);
@@ -51,7 +58,8 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
 
   Future<void> _hydrate() async {
     try {
-      final loaded = await ref.read(postReportOutcomeStoreProvider).loadAll();
+      final store = ref.read(postReportOutcomeStoreProvider);
+      final loaded = await store.loadAll();
       final mapped = <String, PostReportOutcomeRecord>{};
       var convertedUncertain = false;
       for (final record in loaded) {
@@ -72,12 +80,16 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
         }
         if (current.status == PostReportOutcomeStatus.confirming ||
             current.status == PostReportOutcomeStatus.inFlight ||
-            current.status == PostReportOutcomeStatus.persistBlocked) {
+            current.status == PostReportOutcomeStatus.persistBlocked ||
+            current.status == PostReportOutcomeStatus.uncertain ||
+            current.status == PostReportOutcomeStatus.conflict) {
           mapped[current.storageKey] = current;
         }
       }
       state = PostReportCoordinatorState(records: mapped, hydrated: true);
-      if (convertedUncertain) {
+      final migratedLegacy =
+          store is FlutterSecurePostReportOutcomeStore && store.loadedLegacyV1;
+      if (convertedUncertain || migratedLegacy) {
         await _enqueuePersist();
       }
     } on Object {
@@ -121,7 +133,12 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
   }
 
   /// Transición `confirming → inFlight` persistida **antes** del POST.
-  Future<int?> beginInFlight({required int userId, required int postId}) async {
+  Future<int?> beginInFlight({
+    required int userId,
+    required int postId,
+    required String reasonCode,
+    String? details,
+  }) async {
     if (!state.hydrated || state.persistUnavailable) {
       return null;
     }
@@ -130,10 +147,41 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
         existing.status != PostReportOutcomeStatus.confirming) {
       return null;
     }
+    final key = _uuidV4().toLowerCase();
+    if (!isPostReportUuidV4(key)) {
+      _put(existing.copyWith(status: PostReportOutcomeStatus.persistBlocked));
+      return null;
+    }
+    final next = existing.copyWith(
+      status: PostReportOutcomeStatus.inFlight,
+      recordedAtMillis: DateTime.now().millisecondsSinceEpoch,
+      idempotencyKey: key,
+      reasonCode: reasonCode,
+      details: details,
+    );
+    return _persistInFlight(next);
+  }
+
+  /// Reanuda un intento `uncertain` recuperable **sin** regenerar UUID ni payload.
+  Future<int?> beginRecoveryInFlight({
+    required int userId,
+    required int postId,
+  }) async {
+    if (!state.hydrated || state.persistUnavailable) {
+      return null;
+    }
+    final existing = state.recordFor(userId, postId);
+    if (existing == null || !existing.isRecoverableUncertain) {
+      return null;
+    }
     final next = existing.copyWith(
       status: PostReportOutcomeStatus.inFlight,
       recordedAtMillis: DateTime.now().millisecondsSinceEpoch,
     );
+    return _persistInFlight(next);
+  }
+
+  Future<int?> _persistInFlight(PostReportOutcomeRecord next) async {
     _put(next);
     final persisted = await _enqueuePersist();
     if (!persisted) {
@@ -141,8 +189,8 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
       return null;
     }
     if (!matchesGeneration(
-      userId: userId,
-      postId: postId,
+      userId: next.userId,
+      postId: next.postId,
       generation: next.generation,
     )) {
       return null;
@@ -150,17 +198,63 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
     return next.generation;
   }
 
+  /// Persiste `confirmed` **con** payload; solo lo elimina si esa escritura ya terminó.
   Future<bool> markConfirmed({
     required int userId,
     required int postId,
     required int generation,
-  }) {
-    return _persistOutcome(
-      userId: userId,
-      postId: postId,
-      generation: generation,
+    int? reportId,
+  }) async {
+    final existing = state.recordFor(userId, postId);
+    if (existing == null || existing.generation != generation) {
+      return false;
+    }
+    if (existing.status == PostReportOutcomeStatus.confirmed) {
+      if (existing.hasRecoverableAttempt) {
+        await _stripConfirmedPayload(existing);
+      }
+      return true;
+    }
+    if (existing.status != PostReportOutcomeStatus.inFlight &&
+        existing.status != PostReportOutcomeStatus.uncertain) {
+      return false;
+    }
+
+    final confirmed = existing.copyWith(
       status: PostReportOutcomeStatus.confirmed,
+      recordedAtMillis: DateTime.now().millisecondsSinceEpoch,
+      reportId: reportId,
     );
+    _put(confirmed);
+    final persisted = await _enqueuePersist();
+    final afterWrite = state.recordFor(userId, postId);
+    if (afterWrite == null || afterWrite.generation != generation) {
+      return false;
+    }
+    if (!persisted) {
+      if (afterWrite.status == PostReportOutcomeStatus.confirmed) {
+        _put(afterWrite.copyWith(status: PostReportOutcomeStatus.uncertain));
+        await _enqueuePersist();
+      }
+      return false;
+    }
+    if (afterWrite.status != PostReportOutcomeStatus.confirmed) {
+      return false;
+    }
+    await _stripConfirmedPayload(afterWrite);
+    return true;
+  }
+
+  Future<void> _stripConfirmedPayload(PostReportOutcomeRecord confirmed) async {
+    _put(confirmed.copyWith(clearPayload: true));
+    final stripped = await _enqueuePersist();
+    final after = state.recordFor(confirmed.userId, confirmed.postId);
+    if (after == null || after.generation != confirmed.generation) {
+      return;
+    }
+    if (!stripped && after.status == PostReportOutcomeStatus.confirmed) {
+      _put(confirmed);
+    }
   }
 
   Future<bool> markUncertain({
@@ -173,6 +267,20 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
       postId: postId,
       generation: generation,
       status: PostReportOutcomeStatus.uncertain,
+    );
+  }
+
+  Future<bool> markConflict({
+    required int userId,
+    required int postId,
+    required int generation,
+  }) {
+    return _persistOutcome(
+      userId: userId,
+      postId: postId,
+      generation: generation,
+      status: PostReportOutcomeStatus.conflict,
+      clearPayload: true,
     );
   }
 
@@ -205,6 +313,8 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
     required int postId,
     required int generation,
     required PostReportOutcomeStatus status,
+    int? reportId,
+    bool clearPayload = false,
   }) async {
     final existing = state.recordFor(userId, postId);
     if (existing == null || existing.generation != generation) {
@@ -214,6 +324,8 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
       existing.copyWith(
         status: status,
         recordedAtMillis: DateTime.now().millisecondsSinceEpoch,
+        reportId: reportId,
+        clearPayload: clearPayload,
       ),
     );
     final persisted = await _enqueuePersist();

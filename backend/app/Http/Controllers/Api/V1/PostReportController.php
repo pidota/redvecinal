@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domains\Posts\Enums\PostReportStatus;
 use App\Domains\Posts\Models\Post;
 use App\Domains\Posts\Services\ReportPostService;
+use App\Domains\Posts\Support\PostReportIdempotency;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,8 +32,12 @@ class PostReportController extends Controller
             $post,
             null,
             $data['details'] ?? null,
+            PostReportIdempotency::keyFromRequest($request),
         );
 
-        return response()->json(['id' => $record->id, 'status' => $record->status->value], 201);
+        return response()->json([
+            'id' => $record->id,
+            'status' => PostReportStatus::Open->value,
+        ], 201);
     }
 }

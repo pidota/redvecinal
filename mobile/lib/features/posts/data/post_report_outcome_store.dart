@@ -12,12 +12,22 @@ class PostReportOutcomeStoreException implements Exception {
   final String? message;
 }
 
-/// Interpreta el JSON persistido. Cualquier registro ilegible invalida el lote.
+const String kPostReportOutcomesV1Key = 'rv_post_report_outcomes_v1';
+
+const String kPostReportOutcomesV2Key = 'rv_post_report_outcomes_v2';
+
+const int kPostReportOutcomesSchemaVersion = 2;
+
+/// Interpreta el JSON persistido (v1 o v2). Cualquier registro ilegible invalida el lote.
 List<PostReportOutcomeRecord> parsePostReportOutcomePayload(String raw) {
   try {
     final decoded = jsonDecode(raw);
     if (decoded is! Map) {
       throw const PostReportOutcomeStoreException('payload inválido');
+    }
+    final schema = decoded['schema'];
+    if (schema != null && schema != 1 && schema != 2) {
+      throw const PostReportOutcomeStoreException('esquema desconocido');
     }
     final list = decoded['records'];
     if (list is! List) {
@@ -44,8 +54,16 @@ List<PostReportOutcomeRecord> parsePostReportOutcomePayload(String raw) {
   }
 }
 
-/// Persistencia mínima de resultados de reporte (sin motivo ni detalles).
+String encodePostReportOutcomePayload(List<PostReportOutcomeRecord> records) {
+  return jsonEncode({
+    'schema': kPostReportOutcomesSchemaVersion,
+    'records': records.map((record) => record.toJson()).toList(),
+  });
+}
+
+/// Persistencia de resultados de reporte.
 ///
+/// v2 guarda clave y payload solo mientras el intento no está confirmado.
 /// Borrar datos de la app o cambiar de dispositivo elimina esta protección local.
 abstract class PostReportOutcomeStore {
   Future<List<PostReportOutcomeRecord>> loadAll();
@@ -70,6 +88,7 @@ class InMemoryPostReportOutcomeStore implements PostReportOutcomeStore {
   int? failOnSaveNumber;
   Duration writeDelay = Duration.zero;
   int saveCount = 0;
+  int loadCount = 0;
   List<PostReportOutcomeRecord> lastSaved = const [];
 
   List<PostReportOutcomeRecord> get snapshot =>
@@ -77,6 +96,7 @@ class InMemoryPostReportOutcomeStore implements PostReportOutcomeStore {
 
   @override
   Future<List<PostReportOutcomeRecord>> loadAll() async {
+    loadCount++;
     if (failReads) {
       throw const PostReportOutcomeStoreException('read failed');
     }
@@ -105,16 +125,34 @@ class FlutterSecurePostReportOutcomeStore implements PostReportOutcomeStore {
             aOptions: AndroidOptions(encryptedSharedPreferences: true),
           );
 
-  static const _key = 'rv_post_report_outcomes_v1';
-
   final FlutterSecureStorage _storage;
+
+  bool loadedLegacyV1 = false;
 
   @override
   Future<List<PostReportOutcomeRecord>> loadAll() async {
-    final raw = await _storage.read(key: _key);
-    if (raw == null || raw.isEmpty) {
+    loadedLegacyV1 = false;
+    final v2 = await _storage.read(key: kPostReportOutcomesV2Key);
+    if (v2 != null && v2.isNotEmpty) {
+      return _parseOrThrow(v2);
+    }
+    final v1 = await _storage.read(key: kPostReportOutcomesV1Key);
+    if (v1 == null || v1.isEmpty) {
       return const [];
     }
+    loadedLegacyV1 = true;
+    return _parseOrThrow(v1);
+  }
+
+  @override
+  Future<void> saveAll(List<PostReportOutcomeRecord> records) async {
+    await _storage.write(
+      key: kPostReportOutcomesV2Key,
+      value: encodePostReportOutcomePayload(records),
+    );
+  }
+
+  List<PostReportOutcomeRecord> _parseOrThrow(String raw) {
     try {
       return parsePostReportOutcomePayload(raw);
     } on PostReportOutcomeStoreException {
@@ -122,13 +160,5 @@ class FlutterSecurePostReportOutcomeStore implements PostReportOutcomeStore {
     } on Object {
       throw const PostReportOutcomeStoreException('almacenamiento corrupto');
     }
-  }
-
-  @override
-  Future<void> saveAll(List<PostReportOutcomeRecord> records) async {
-    final payload = jsonEncode({
-      'records': records.map((record) => record.toJson()).toList(),
-    });
-    await _storage.write(key: _key, value: payload);
   }
 }

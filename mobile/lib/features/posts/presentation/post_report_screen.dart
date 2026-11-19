@@ -23,9 +23,16 @@ class PostReportScreen extends ConsumerStatefulWidget {
 class _PostReportScreenState extends ConsumerState<PostReportScreen> {
   late final TextEditingController _detailsController;
 
-  static const _uncertainMessage =
+  static const _legacyUncertainMessage =
       'No pudimos confirmar si el reporte fue recibido. Para evitar '
       'duplicados, no lo enviaremos nuevamente desde esta aplicación por ahora.';
+
+  static const _recoverableUncertainMessage =
+      'No pudimos confirmar si tu denuncia fue recibida. Puedes comprobar el '
+      'mismo envío de forma segura para evitar duplicados.';
+
+  static const _conflictMessage =
+      'Este envío no coincide con un reporte anterior. No se creó otra denuncia.';
 
   @override
   void initState() {
@@ -102,6 +109,26 @@ class _PostReportScreenState extends ConsumerState<PostReportScreen> {
 
     final originalUserId = auth.user.id;
     final result = await notifier.submitConfirmed();
+    await _handleSubmitResult(result, originalUserId);
+  }
+
+  Future<void> _onRecoverPressed() async {
+    final auth = ref.read(authControllerProvider);
+    if (auth is! AuthAuthenticated) {
+      return;
+    }
+    final notifier = ref.read(
+      postReportFormControllerProvider(widget.postId).notifier,
+    );
+    final originalUserId = auth.user.id;
+    final result = await notifier.recoverUncertain();
+    await _handleSubmitResult(result, originalUserId);
+  }
+
+  Future<void> _handleSubmitResult(
+    PostReportSubmitResult result,
+    int originalUserId,
+  ) async {
     if (!mounted) {
       return;
     }
@@ -156,14 +183,21 @@ class _PostReportScreenState extends ConsumerState<PostReportScreen> {
     final inFlight = outcome?.status == PostReportOutcomeStatus.inFlight;
     final confirming = outcome?.status == PostReportOutcomeStatus.confirming;
     final confirmed = outcome?.status == PostReportOutcomeStatus.confirmed;
+    final conflict = outcome?.status == PostReportOutcomeStatus.conflict;
     final persistBlocked =
         outcome?.status == PostReportOutcomeStatus.persistBlocked ||
         coordinatorState.persistUnavailable;
+    final recoverableUncertain = outcome?.isRecoverableUncertain ?? false;
     final uncertain =
         outcome?.status == PostReportOutcomeStatus.uncertain ||
         form.submitUncertain;
     final blocked =
-        confirmed || uncertain || inFlight || confirming || persistBlocked;
+        confirmed ||
+        uncertain ||
+        inFlight ||
+        confirming ||
+        persistBlocked ||
+        conflict;
     final canEdit = !blocked;
 
     return Scaffold(
@@ -181,6 +215,56 @@ class _PostReportScreenState extends ConsumerState<PostReportScreen> {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+          if (inFlight) ...[
+            const SizedBox(height: RvSpacing.md),
+            const Center(child: CircularProgressIndicator()),
+            const SizedBox(height: RvSpacing.sm),
+            const Text('Enviando reporte…'),
+          ],
+          if (confirmed) ...[
+            const SizedBox(height: RvSpacing.md),
+            Text(
+              'Ya enviaste un reporte de esta publicación desde esta aplicación.',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+          if (conflict) ...[
+            const SizedBox(height: RvSpacing.md),
+            Text(_conflictMessage, style: theme.textTheme.bodyMedium),
+          ],
+          if (uncertain && !conflict) ...[
+            const SizedBox(height: RvSpacing.md),
+            Text(
+              recoverableUncertain
+                  ? _recoverableUncertainMessage
+                  : _legacyUncertainMessage,
+              style: theme.textTheme.bodyMedium,
+            ),
+            if (recoverableUncertain && !inFlight) ...[
+              const SizedBox(height: RvSpacing.sm),
+              FilledButton.tonal(
+                onPressed: persistBlocked ? null : _onRecoverPressed,
+                child: const Text('Comprobar envío'),
+              ),
+            ],
+          ],
+          if (persistBlocked && !uncertain) ...[
+            const SizedBox(height: RvSpacing.md),
+            Text(
+              'No pudimos registrar el envío de forma segura. Para evitar '
+              'duplicados, no lo enviaremos ahora.',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+          if (form.submitMessage != null) ...[
+            const SizedBox(height: RvSpacing.md),
+            Text(
+              form.submitMessage!,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ],
           const SizedBox(height: RvSpacing.md),
           Text('Motivo', style: theme.textTheme.titleSmall),
           const SizedBox(height: RvSpacing.xs),
@@ -231,40 +315,6 @@ class _PostReportScreenState extends ConsumerState<PostReportScreen> {
               onChanged: canEdit ? notifier.setDetails : null,
             ),
           ),
-          if (inFlight) ...[
-            const SizedBox(height: RvSpacing.md),
-            const Center(child: CircularProgressIndicator()),
-            const SizedBox(height: RvSpacing.sm),
-            const Text('Enviando reporte…'),
-          ],
-          if (confirmed) ...[
-            const SizedBox(height: RvSpacing.md),
-            Text(
-              'Ya enviaste un reporte de esta publicación desde esta aplicación.',
-              style: theme.textTheme.bodyMedium,
-            ),
-          ],
-          if (uncertain) ...[
-            const SizedBox(height: RvSpacing.md),
-            Text(_uncertainMessage, style: theme.textTheme.bodyMedium),
-          ],
-          if (persistBlocked && !uncertain) ...[
-            const SizedBox(height: RvSpacing.md),
-            Text(
-              'No pudimos registrar el envío de forma segura. Para evitar '
-              'duplicados, no lo enviaremos ahora.',
-              style: theme.textTheme.bodyMedium,
-            ),
-          ],
-          if (form.submitMessage != null) ...[
-            const SizedBox(height: RvSpacing.md),
-            Text(
-              form.submitMessage!,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
-          ],
           const SizedBox(height: RvSpacing.lg),
           FilledButton(
             onPressed: blocked ? null : _onSendPressed,

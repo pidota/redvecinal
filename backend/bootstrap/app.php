@@ -1,5 +1,9 @@
 <?php
 
+use App\Domains\Chat\Exceptions\ChatDomainException;
+use App\Domains\Neighborhoods\Exceptions\MembershipRequestException;
+use App\Domains\Posts\Exceptions\PostDomainException;
+use App\Domains\Posts\Exceptions\PostReportIdempotencyException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,19 +24,25 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (\App\Domains\Chat\Exceptions\ChatDomainException $e, $request) {
+        $exceptions->render(function (ChatDomainException $e, $request) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $e->getMessage()], 422);
             }
         });
 
-        $exceptions->render(function (\App\Domains\Neighborhoods\Exceptions\MembershipRequestException $e, $request) {
+        $exceptions->render(function (MembershipRequestException $e, $request) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $e->getMessage()], $e->httpStatus);
             }
         });
 
-        $exceptions->render(function (\App\Domains\Posts\Exceptions\PostDomainException $e, $request) {
+        $exceptions->render(function (PostReportIdempotencyException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], $e->httpStatus);
+            }
+        });
+
+        $exceptions->render(function (PostDomainException $e, $request) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $e->getMessage()], 422);
             }

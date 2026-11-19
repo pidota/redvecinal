@@ -319,6 +319,7 @@ class FakePostGateway implements PostGateway {
   int reportPostCallCount = 0;
   Map<int, Object?>? reportFailureByPostId;
   Map<int, PostReportResult>? reportResultByPostId;
+  List<Object?> reportFailureQueue = [];
   final List<Map<String, dynamic>> reportPayloads = [];
   final List<Map<String, dynamic>> rejectPayloads = [];
   int uploadCallCount = 0;
@@ -818,6 +819,7 @@ class FakePostGateway implements PostGateway {
   Future<PostReportResult> reportPost({
     required int postId,
     required String reasonCode,
+    required String idempotencyKey,
     String? details,
   }) async {
     reportPostCallCount++;
@@ -831,15 +833,22 @@ class FakePostGateway implements PostGateway {
     if (reportDelayMs > 0) {
       await Future<void>.delayed(Duration(milliseconds: reportDelayMs));
     }
+    reportPayloads.add({
+      'postId': postId,
+      'reason_code': reasonCode,
+      'idempotencyKey': idempotencyKey,
+      if (details != null) 'details': details,
+    });
+    if (reportFailureQueue.isNotEmpty) {
+      final queued = reportFailureQueue.removeAt(0);
+      if (queued != null) {
+        throw queued;
+      }
+    }
     final failure = reportFailureByPostId?[postId];
     if (failure != null) {
       throw failure;
     }
-    reportPayloads.add({
-      'postId': postId,
-      'reason_code': reasonCode,
-      if (details != null) 'details': details,
-    });
     return reportResultByPostId?[postId] ??
         const PostReportResult(id: 1, status: 'open');
   }

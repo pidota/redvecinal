@@ -129,3 +129,9 @@ Rutas Sanctum obligatorio. Autorización de lectura: `PostPolicy::view` (post in
 | **422** | Validación de `body` o regla de dominio posts (`PostDomainException` → JSON `{ "message" }`) |
 | **404** | Sin permiso `view` del post |
 Los contadores `engagement.comments_count` en `PostResource` siguen contando solo comentarios visibles.
+
+### Reportes de publicaciones
+
+`POST /api/v1/posts/{post}/reports` — Sanctum obligatorio. Autorización: sin `view` → **404**; sin `report` → **403**. Cuerpo: `{ "reason_code": "string ≤60", "details": "opcional ≤2000" }`. Respuesta de éxito: **201** `{ "id", "status" }` con `status` de creación (`open`).
+
+Cabecera opcional `Idempotency-Key` (UUID v4). Sin cabecera, cada POST crea un reporte. Flutter 5E.4 envía la cabecera y reutiliza la misma clave solo en «Comprobar envío». Replay exacto → **201** mismo `id`; misma clave con otro contenido o post → **409**; clave inválida o vacía → **422**. Detalle: `docs/moderacion-contenido.md`.

@@ -20,6 +20,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'resolved_by',
     'resolved_at',
     'resolution_note',
+    'idempotency_key',
+    'payload_fingerprint',
 ])]
 class PostReport extends Model
 {

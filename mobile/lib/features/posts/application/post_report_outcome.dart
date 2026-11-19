@@ -1,9 +1,12 @@
+import '../data/post_report_idempotency.dart';
+
 enum PostReportOutcomeStatus {
   confirming,
   inFlight,
   confirmed,
   uncertain,
   persistBlocked,
+  conflict,
 }
 
 class PostReportOutcomeRecord {
@@ -13,6 +16,10 @@ class PostReportOutcomeRecord {
     required this.status,
     required this.generation,
     required this.recordedAtMillis,
+    this.idempotencyKey,
+    this.reasonCode,
+    this.details,
+    this.reportId,
   });
 
   final int userId;
@@ -20,13 +27,34 @@ class PostReportOutcomeRecord {
   final PostReportOutcomeStatus status;
   final int generation;
   final int recordedAtMillis;
+  final String? idempotencyKey;
+  final String? reasonCode;
+  final String? details;
+  final int? reportId;
 
   String get storageKey => '$userId:$postId';
+
+  bool get hasRecoverableAttempt =>
+      idempotencyKey != null &&
+      isPostReportUuidV4(idempotencyKey!) &&
+      reasonCode != null &&
+      reasonCode!.isNotEmpty;
+
+  bool get isRecoverableUncertain =>
+      status == PostReportOutcomeStatus.uncertain && hasRecoverableAttempt;
+
+  bool get isLegacyUncertain =>
+      status == PostReportOutcomeStatus.uncertain && !hasRecoverableAttempt;
 
   PostReportOutcomeRecord copyWith({
     PostReportOutcomeStatus? status,
     int? generation,
     int? recordedAtMillis,
+    String? idempotencyKey,
+    String? reasonCode,
+    String? details,
+    int? reportId,
+    bool clearPayload = false,
   }) {
     return PostReportOutcomeRecord(
       userId: userId,
@@ -34,6 +62,11 @@ class PostReportOutcomeRecord {
       status: status ?? this.status,
       generation: generation ?? this.generation,
       recordedAtMillis: recordedAtMillis ?? this.recordedAtMillis,
+      idempotencyKey:
+          clearPayload ? null : idempotencyKey ?? this.idempotencyKey,
+      reasonCode: clearPayload ? null : reasonCode ?? this.reasonCode,
+      details: clearPayload ? null : details ?? this.details,
+      reportId: reportId ?? this.reportId,
     );
   }
 
@@ -44,6 +77,10 @@ class PostReportOutcomeRecord {
       'status': status.name,
       'generation': generation,
       'recordedAt': recordedAtMillis,
+      if (idempotencyKey != null) 'idempotencyKey': idempotencyKey,
+      if (reasonCode != null) 'reasonCode': reasonCode,
+      if (details != null) 'details': details,
+      if (reportId != null) 'reportId': reportId,
     };
   }
 
@@ -69,12 +106,26 @@ class PostReportOutcomeRecord {
         status == PostReportOutcomeStatus.persistBlocked) {
       return null;
     }
+
+    final rawKey = json['idempotencyKey'];
+    final idempotencyKey =
+        rawKey is String && rawKey.isNotEmpty ? rawKey : null;
+    final rawReason = json['reasonCode'];
+    final reasonCode =
+        rawReason is String && rawReason.isNotEmpty ? rawReason : null;
+    final rawDetails = json['details'];
+    final details = rawDetails is String ? rawDetails : null;
+
     return PostReportOutcomeRecord(
       userId: userId,
       postId: postId,
       status: status,
       generation: generation,
       recordedAtMillis: recordedAt,
+      idempotencyKey: idempotencyKey,
+      reasonCode: reasonCode,
+      details: details,
+      reportId: _jsonInt(json['reportId']),
     );
   }
 
@@ -113,6 +164,10 @@ class PostReportSubmitSuccess extends PostReportSubmitResult {
 
 class PostReportSubmitUncertain extends PostReportSubmitResult {
   const PostReportSubmitUncertain();
+}
+
+class PostReportSubmitConflict extends PostReportSubmitResult {
+  const PostReportSubmitConflict();
 }
 
 class PostReportSubmitFailure extends PostReportSubmitResult {

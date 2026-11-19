@@ -286,7 +286,7 @@ El **backend sigue siendo la autoridad definitiva** en cola, detalle y decisione
 | MOD-11 | Reconciliación sin atribución causal perfecta del resultado del POST. |
 | MOD-12 | Sin E2E real multiinstancia Android en CI (solo `flutter test` en Ubuntu). |
 
-## Reportes de publicaciones — Fase 5.4F-5C
+## Reportes de publicaciones — Fase 5.4F-5C / 5E.4
 
 Flujo para **vecinos autenticados** que reportan una publicación comunitaria publicada. El cliente no afirma resolución ni moderación automática.
 
@@ -296,7 +296,7 @@ Flujo para **vecinos autenticados** que reportan una publicación comunitaria pu
 2. El formulario ofrece motivos **locales** `spam` e `inappropriate` (catálogo provisional de la app; no es un enum municipal ni un catálogo oficial del backend).
 3. El campo **Detalles** es opcional (máx. 2000 caracteres; no se trunca en silencio).
 4. **Enviar reporte** abre una confirmación explícita. El POST **no** se ejecuta al validar, navegar ni reconstruir widgets.
-5. Tras confirmar, un único `POST`. Si el servidor responde **HTTP 201** con `{ id, status }`, la app muestra «Reporte recibido» y no exhibe el identificador interno.
+5. Tras confirmar, un único `POST` con cabecera `Idempotency-Key` (UUID v4 persistida antes del envío). Si el servidor responde **HTTP 201** con `{ id, status }`, la app muestra «Reporte recibido» y no exhibe el identificador interno.
 
 ### Contrato
 
@@ -311,7 +311,7 @@ Request:
 }
 ```
 
-`details` se omite si el vecino no escribe nada. Flutter **no** envía `reporter_id` ni `user_id`; el backend atribuye el reporte al token Sanctum.
+`details` se omite si el vecino no escribe nada. Cabecera `Idempotency-Key: <uuid-v4>`. Flutter **no** envía `reporter_id` ni `user_id`; el backend atribuye el reporte al token Sanctum.
 
 Response (201):
 
@@ -335,36 +335,37 @@ Response (201):
 
 Tras despachar el POST, timeout, error de red, HTTP 5xx o un 201 malformado **no** demuestran que el servidor haya rechazado la creación. La app:
 
-- registra estado local **uncertain** (sin motivo ni detalles);
-- muestra un mensaje neutro (no afirma éxito ni fracaso definitivo);
-- **no** reintenta el POST;
-- **no** reconcilia con un GET ficticio (no hay endpoint «ya reporté»).
+- registra estado local **uncertain** con la UUID y el payload originales;
+- muestra **Comprobar envío** (replay explícito, misma clave y mismo contenido; el servidor puede crear el reporte si el primero nunca llegó);
+- **no** reintenta al arrancar ni desde Dio;
+- **no** reconcilia con un GET ficticio.
 
-Los 403/404/422 definitivos no dejan marca incierta y permiten corregir cuando es seguro.
+Los registros **v1** inciertos (sin UUID) siguen bloqueados y no se recuperan. 409 deja el intento en conflicto. 401/403/404 y un 422 de `reason_code`/`details` o de clave inválida reconocible no son éxito y **liberan** el vuelo. Un 422 genérico, 429 o respuesta de proxy se tratan como **uncertain** (misma UUID).
 
 ### Persistencia local
 
-Se guarda solo: identificador de usuario, identificador de publicación, estado (`confirmed` / `uncertain` / `inFlight` hidratado como incierto) y fecha. Sin token, sin `reason_code`, sin `details`, sin body HTTP.
+Almacén `rv_post_report_outcomes_v2` (schema 2). Antes del POST: `userId`, `postId`, UUID, `reason_code`, `details`, estado, `generation`, `recordedAt`. El 201 se persiste como `confirmed` **con** payload; el payload sensible se borra solo si esa escritura terminó. Si falla, el intento sigue recuperable. Sin token ni body HTTP completo.
 
-En **web** el almacén es en memoria (se pierde al recargar). En Android se usa el almacenamiento seguro existente.
+Migración: si no hay v2 se lee `rv_post_report_outcomes_v1`. `confirmed` se conserva. `uncertain`/`inFlight` sin clave **no** reciben UUID inventada. v1 no se elimina.
+
+En **web** el almacén es en memoria (se pierde al recargar; la recuperación vale solo mientras el intento sigue en esa sesión). En Android/iOS se usa almacenamiento seguro. No se degrada el móvil para igualar web.
 
 ### Limitaciones
 
-- El backend **crea** un reporte en cada POST (`ReportPostService`); **no** hay idempotencia ni índice único `(reporter_id, post_id)`.
-- Otro dispositivo, o borrar los datos de la aplicación, elimina las marcas locales y puede permitir otro POST.
+- El backend es idempotente **solo** con `Idempotency-Key`. Sin cabecera, cada POST crea un reporte. No hay `UNIQUE(reporter_id, post_id)`.
+- Otro dispositivo, o borrar los datos de la aplicación, elimina las marcas locales.
 - No hay endpoint para consultar si el vecino ya reportó.
-- Filament permite **consultar** reportes; **aún no** hay flujo de resolución administrativa en esta fase.
-- El catálogo de motivos de la app es provisional y local.
+- Filament gestiona reportes en 5D; el catálogo de motivos de la app es provisional y local.
 
 ### Riesgos residuales
 
 | ID | Descripción |
 |----|-------------|
-| RPT-P0-01 | Sin deduplicación de servidor: la protección anti-duplicado es **solo local** en este dispositivo. |
-| RPT-5C5-R1 | Si falla persistir `inFlight` **antes** del POST, no se envía; al reiniciar (sin marca en disco) el vecino puede intentar de nuevo. Ese segundo intento no duplica un POST que nunca salió. |
+| RPT-P0-01 | Mitigado en un mismo dispositivo con clave persistida; otro dispositivo puede crear otro reporte. |
+| RPT-5C5-R1 | Si falla persistir `inFlight` **antes** del POST, no se envía. |
 | RPT-WEB | En web no hay persistencia entre recargas. |
-
-No hay deduplicación garantizada por servidor. Un reporte `open` **no** significa que ya fue resuelto.
+| RPT-LEGACY | Intentos inciertos v1 no se pueden comprobar. |
+| RPT-MYSQL | La carrera InnoDB a dos procesos **no** se ha ejecutado en CI. |
 
 ## Subfases pendientes
 

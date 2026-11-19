@@ -20,7 +20,9 @@ Eventos en `post_moderation_events` y eventos Laravel (`PostRevisionSubmitted`, 
 
 ### Creación desde Flutter
 
-El vecino autenticado envía `POST /api/v1/posts/{post}/reports` (`ReportPostService`). Cada solicitud **crea** un reporte en estado `open`. No hay idempotencia ni índice único `(reporter_id, post_id)`. Flutter no envía `reporter_id`; el backend atribuye el reporte al token Sanctum.
+El vecino autenticado envía `POST /api/v1/posts/{post}/reports` (`ReportPostService`). Flutter no envía `reporter_id`; el backend atribuye el reporte al token Sanctum.
+
+**Estado actual (5E.4):** el backend es idempotente **si** el cliente envía `Idempotency-Key` (UUID v4). Flutter genera una UUID v4 por intento, la persiste **antes** del POST y la reutiliza solo en «Comprobar envío». Sin cabecera (clientes antiguos), cada POST válido **crea** una fila nueva (`open`). No hay índice único `(reporter_id, post_id)`.
 
 La API de esta fase reporta **publicaciones**, no comentarios. La columna `post_comment_id` existe en `post_reports` por preparación de esquema; no hay endpoint móvil de reporte de comentarios.
 
@@ -107,3 +109,76 @@ Un test futuro debería seguir el patrón de `MembershipRequestMysqlConcurrencyT
 ### Ausencia de deduplicación backend
 
 Varios reportes `open` sobre la misma publicación son válidos. Un reporte `open` no implica que el contenido ya haya sido moderado.
+
+### Idempotencia de reportes (5E.3–5E.4)
+
+El backend reconoce un replay **solo** cuando hay `Idempotency-Key` válida. Flutter 5E.4 envía esa cabecera, persiste la clave y el payload **antes** del POST, y reutiliza el mismo intento solo con **Comprobar envío**.
+
+#### Esquema (5E.2)
+
+Migración aditiva `2026_11_19_210000_add_idempotency_columns_to_post_reports_table`:
+
+| Columna | Tipo | Nulo | Uso previsto |
+|---------|------|------|----------------|
+| `idempotency_key` | `string(36)` | sí | UUID v4 del intento |
+| `payload_fingerprint` | `string(64)` | sí | SHA-256 hexadecimal del payload canónico |
+
+Índice único compuesto: `(reporter_id, idempotency_key)` (`post_reports_reporter_idempotency_unique`).
+
+No existe `UNIQUE(reporter_id, post_id)`. Los reportes previos quedan con ambas columnas en `NULL`. MySQL 8.4 (InnoDB) y SQLite permiten **varios `NULL`** bajo el único compuesto; dos reportes sin clave del mismo usuario no violan el índice.
+
+La clave se interpreta junto al **usuario autenticado**, no de forma global. La misma clave puede existir para dos `reporter_id` distintos.
+
+#### Contrato HTTP (5E.3)
+
+Cabecera opcional `Idempotency-Key`: UUID v4 (RFC 4122, versión 4, variante 8/9/a/b). **Ausente** = legacy (alta nueva, columnas nulas). **Presente y vacía**, con espacios, de otra versión, múltiple o mal formada = **422** (no se crea fila). Tras validar se persiste en **minúsculas**.
+
+Autorización **antes** del lookup de replay: Sanctum, `view` (404) y `report` (403). La clave no salta visibilidad, publicación no `published` ni aislamiento municipal. El lookup es siempre `(reporter_id del token, clave validada)`; nunca solo por UUID.
+
+`reason_code` y `details` conservan las reglas previas (sin trim extra). El JSON de éxito no cambia: **201** `{ "id", "status" }` con `status` de creación (`open`). Un replay no expone el estado administrativo persistido.
+
+| Caso | Código |
+|------|--------|
+| **401** | Sin token Sanctum |
+| **404** | Sin `view` del post |
+| **403** | Con `view` pero sin `report` |
+| **422** | Cuerpo inválido, o cabecera presente e inválida |
+| **409** | Misma clave y usuario, huella o `post_id` distintos (sin mutar filas) |
+| **201** | Alta nueva o replay exacto `{id, status:"open"}` |
+
+El cliente **no** puede fijar `reporter_id` ni `municipality_id` por el cuerpo JSON.
+
+Identidad lógica: `(reporter_id, idempotency_key)`. La publicación y el contenido validado van en la huella. Un replay no reabre el reporte, no toca `resolved_by` / `resolved_at` / `resolution_note` y no genera eventos de moderación.
+
+#### Algoritmo
+
+1. Sin clave: `INSERT` legacy (sin transacción extra).
+2. Con clave: transacción, `SELECT … FOR UPDATE` por usuario y clave.
+3. Si existe: comparar `post_id` y `payload_fingerprint`; igual → devolver fila; distinto → **409**.
+4. Si no existe: `INSERT` con clave y huella. Si el único `(reporter_id, idempotency_key)` salta, **solo** ese índice se trata como carrera: se relée la fila y se aplica el paso 3. Otros `23000` (FK, otros únicos), deadlocks `1213` y lock wait `1205` se relanzan; no hay reintentos genéricos.
+5. Si tras el único no aparece fila, se relanza el error SQL **sin** insertar otra vez.
+
+#### Huella canónica
+
+`App\Domains\Posts\Support\PostReportIdempotency::fingerprint($postId, $reasonCode, $details)`:
+
+1. JSON UTF-8 sin espacios, `JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES`.
+2. Orden fijo de claves: `post_id`, `reason_code`, `details`.
+3. `post_id`: número JSON o `null` (nunca string).
+4. `reason_code` y `details`: valores **ya validados**, sin trim, sin plegado de mayúsculas, sin NFC.
+5. `details` PHP `null` → JSON `null`; string vacío `""` → JSON `""`. Son huellas distintas. En HTTP, el middleware de Laravel convierte `""` en `null` **antes** de validar (comportamiento previo, no introducido en 5E.3): omitir `details` y enviar `""` es el mismo intento. El servicio, si recibe `""` crudo, sigue distinguirlo.
+6. SHA-256 del JSON; hex minúsculas de 64 caracteres.
+
+#### Concurrencia
+
+La garantía final es el único de base de datos, no un SELECT previo. Hay tests SQLite del camino de colisión (lookup omitido a propósito). La carrera InnoDB a dos procesos (`PostReportIdempotencyMysqlConcurrencyTest` + worker + barrera de archivos) se omite en `php artisan test` (SQLite) y **no** forma parte de `phpunit.mysql.xml`. Se ejecuta solo con `phpunit.mysql.idempotency.xml` en el workflow `mysql-idempotency.yml` (`workflow_dispatch`), contra MySQL 8.4 efímero (`red_vecinal_testing`, `127.0.0.1`). **Todavía no hay resultados reales de GitHub Actions.** No ejecutar contra MariaDB de Laragon ni contra el VPS.
+
+#### Cliente Flutter (5E.4)
+
+La app genera una UUID v4 con `Random.secure` (sin paquete extra), en minúsculas, distinta por intento lógico. Se persiste **antes** del POST junto con `reason_code` y `details` en `rv_post_report_outcomes_v2` (Android/iOS: almacenamiento seguro). No hay replay automático al arrancar: el vecino usa **Comprobar envío**, que reenvía la misma URL, clave y payload. Esa acción **puede crear** el reporte si el primer POST nunca llegó; no afirma que solo consulta.
+
+Migración desde `rv_post_report_outcomes_v1`: `confirmed` sigue bloqueando; `uncertain`/`inFlight` sin UUID **no** se recuperan ni se convierten en un POST nuevo. v1 no se borra al escribir v2.
+
+Un 201 se confirma en disco **con** payload; solo después se borra `reason_code`/`details`/UUID (se puede conservar `reportId`). Si esa escritura falla, el intento sigue `uncertain` y recuperable. Un 409 deja el intento en `conflict`. Timeout, red, 5xx, 429, 422 genérico o 201 malformado conservan clave y payload. Un 422 de `reason_code`/`details` o de clave inválida reconocible **sí** libera el vuelo (el servidor no insertó). En **web** el almacén sigue en memoria: la recuperación vale hasta recargar.
+
+La concurrencia real con dos conexiones MySQL 8.4 **sigue sin ejecutarse en CI** hasta autorizar commit/push y un `workflow_dispatch` de `.github/workflows/mysql-idempotency.yml`.

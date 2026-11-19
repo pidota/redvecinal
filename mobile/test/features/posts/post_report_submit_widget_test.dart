@@ -102,9 +102,12 @@ void main() {
     await confirmSend(tester);
     await tester.pumpAndSettle();
     expect(
-      find.textContaining('No pudimos confirmar si el reporte fue recibido'),
+      find.textContaining('No pudimos confirmar si tu denuncia fue recibida'),
       findsOneWidget,
     );
+    expect(find.textContaining('mismo envío'), findsOneWidget);
+    expect(find.textContaining('sin generar otra denuncia'), findsNothing);
+    expect(find.text('Comprobar envío'), findsOneWidget);
     final button = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Enviar reporte'),
     );

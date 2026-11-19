@@ -14,6 +14,7 @@ import 'models/post_attachment_upload_result.dart';
 import 'models/post_reaction.dart';
 import 'models/post_report_result.dart';
 import 'post_moderation_failure.dart';
+import 'post_report_idempotency.dart';
 import 'post_report_validation.dart';
 
 abstract class PostGateway {
@@ -92,6 +93,7 @@ abstract class PostGateway {
   Future<PostReportResult> reportPost({
     required int postId,
     required String reasonCode,
+    required String idempotencyKey,
     String? details,
   });
 }
@@ -626,6 +628,7 @@ class PostRepository implements PostGateway {
   Future<PostReportResult> reportPost({
     required int postId,
     required String reasonCode,
+    required String idempotencyKey,
     String? details,
   }) async {
     _ensureConfigured();
@@ -637,6 +640,11 @@ class PostRepository implements PostGateway {
     if (validation != null) {
       throw validation;
     }
+    if (!isPostReportUuidV4(idempotencyKey)) {
+      throw const ApiValidationFailure({
+        kPostReportIdempotencyHeader: ['Clave de idempotencia inválida.'],
+      }, 'No se pudo enviar el reporte de forma segura.');
+    }
 
     final payload = <String, dynamic>{'reason_code': reasonCode};
     if (details != null) {
@@ -647,6 +655,9 @@ class PostRepository implements PostGateway {
       final response = await _dio.post<Map<String, dynamic>>(
         '/posts/$postId/reports',
         data: payload,
+        options: Options(
+          headers: {kPostReportIdempotencyHeader: idempotencyKey},
+        ),
       );
 
       final statusCode = response.statusCode ?? 0;

@@ -36,7 +36,7 @@ Además de las tablas estándar de Laravel (usuarios, sesiones, caché, jobs):
 | `posts` | Publicaciones (estado global) |
 | `post_revisions` | Contenido versionado |
 | `post_attachments` | Adjuntos por revisión |
-| `post_comments`, `post_reactions`, `post_reports` | Interacción |
+| `post_comments`, `post_reactions`, `post_reports` | Interacción. En `post_reports`, `idempotency_key` y `payload_fingerprint` (nullable) con único `(reporter_id, idempotency_key)`. Replay HTTP en 5E.3; Flutter 5E.4+ envía `Idempotency-Key`. |
 | `post_moderation_events` | Auditoría de moderación |
 | `chat_rooms` | Sala principal por junta (única por `neighborhood_group_id`) |
 | `chat_messages` | Mensajes (idempotencia `client_message_id`) |
