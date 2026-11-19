@@ -12,7 +12,9 @@ import 'models/post_detail.dart';
 import 'models/post_category.dart';
 import 'models/post_attachment_upload_result.dart';
 import 'models/post_reaction.dart';
+import 'models/post_report_result.dart';
 import 'post_moderation_failure.dart';
+import 'post_report_validation.dart';
 
 abstract class PostGateway {
   Future<PaginatedFeedPosts> listPosts({
@@ -85,6 +87,12 @@ abstract class PostGateway {
   Future<PostDetail> rejectPost({
     required int postId,
     required String rejectionReason,
+  });
+
+  Future<PostReportResult> reportPost({
+    required int postId,
+    required String reasonCode,
+    String? details,
   });
 }
 
@@ -611,6 +619,50 @@ class PostRepository implements PostGateway {
       );
     } on DioException catch (e) {
       throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<PostReportResult> reportPost({
+    required int postId,
+    required String reasonCode,
+    String? details,
+  }) async {
+    _ensureConfigured();
+
+    final validation = validatePostReportInput(
+      reasonCode: reasonCode,
+      details: details,
+    );
+    if (validation != null) {
+      throw validation;
+    }
+
+    final payload = <String, dynamic>{'reason_code': reasonCode};
+    if (details != null) {
+      payload['details'] = details;
+    }
+
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/posts/$postId/reports',
+        data: payload,
+      );
+
+      final statusCode = response.statusCode ?? 0;
+      final body = response.data;
+      if (statusCode == 201 && body != null) {
+        return PostReportResult.fromJson(body);
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    } on ApiUnexpectedFailure {
+      rethrow;
     }
   }
 

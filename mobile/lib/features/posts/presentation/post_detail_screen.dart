@@ -7,6 +7,8 @@ import '../../../core/theme/rv_spacing.dart';
 import '../../../shared/widgets/rv_card.dart';
 import '../../../shared/widgets/rv_empty_state.dart';
 import '../../../shared/widgets/rv_loading_indicator.dart';
+import '../../auth/application/auth_controller.dart';
+import '../../auth/domain/auth_state.dart';
 import '../../neighborhoods/presentation/widgets/neighborhood_api_error.dart';
 import '../application/post_detail_controller.dart';
 import '../data/models/feed_post_mine_presentation.dart';
@@ -22,6 +24,10 @@ bool _canEditDetail(PostDetail detail) {
       !detail.isMunicipal;
 }
 
+bool _canReportPublishedPost(PostDetail detail, AuthState auth) {
+  return auth is AuthAuthenticated && detail.isPublished;
+}
+
 class PostDetailScreen extends ConsumerWidget {
   const PostDetailScreen({required this.postId, super.key});
 
@@ -31,6 +37,7 @@ class PostDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detailAsync = ref.watch(postDetailControllerProvider(postId));
     final notifier = ref.read(postDetailControllerProvider(postId).notifier);
+    final auth = ref.watch(authControllerProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -38,16 +45,36 @@ class PostDetailScreen extends ConsumerWidget {
         leading: BackButton(onPressed: () => context.pop()),
         actions: [
           detailAsync.maybeWhen(
-                data:
-                    (detail) =>
-                        _canEditDetail(detail)
-                            ? IconButton(
-                              tooltip: 'Editar',
-                              icon: const Icon(Icons.edit_outlined),
-                              onPressed:
-                                  () => context.push('/posts/$postId/edit'),
-                            )
-                            : null,
+                data: (detail) {
+                  final actions = <Widget>[];
+                  if (_canEditDetail(detail)) {
+                    actions.add(
+                      IconButton(
+                        tooltip: 'Editar',
+                        icon: const Icon(Icons.edit_outlined),
+                        onPressed: () => context.push('/posts/$postId/edit'),
+                      ),
+                    );
+                  }
+                  if (_canReportPublishedPost(detail, auth)) {
+                    actions.add(
+                      Semantics(
+                        button: true,
+                        label: 'Reportar publicación',
+                        child: IconButton(
+                          tooltip: 'Reportar publicación',
+                          icon: const Icon(Icons.flag_outlined),
+                          onPressed:
+                              () => context.push('/posts/$postId/report'),
+                        ),
+                      ),
+                    );
+                  }
+                  if (actions.isEmpty) {
+                    return null;
+                  }
+                  return Row(mainAxisSize: MainAxisSize.min, children: actions);
+                },
                 orElse: () => null,
               ) ??
               const SizedBox.shrink(),

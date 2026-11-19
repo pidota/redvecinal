@@ -15,6 +15,7 @@ import 'features/neighborhoods/neighborhood_test_support.dart';
 import 'features/posts/post_test_support.dart';
 import 'package:red_vecinal/features/neighborhoods/data/neighborhood_repository.dart';
 import 'package:red_vecinal/features/posts/data/models/paginated_feed_posts.dart';
+import 'package:red_vecinal/features/posts/data/post_report_outcome_store.dart';
 import 'package:red_vecinal/features/posts/data/post_repository.dart';
 
 class AuthenticatedBootAuthController extends AuthController {
@@ -35,6 +36,9 @@ Future<void> pumpRedVecinalApp(
     ProviderScope(
       overrides: [
         appConfigProvider.overrideWithValue(testAppConfig),
+        postReportOutcomeStoreProvider.overrideWithValue(
+          InMemoryPostReportOutcomeStore(),
+        ),
         ...overrides,
       ],
       child: const RedVecinalApp(),

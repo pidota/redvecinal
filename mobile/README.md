@@ -286,6 +286,86 @@ El **backend sigue siendo la autoridad definitiva** en cola, detalle y decisione
 | MOD-11 | Reconciliación sin atribución causal perfecta del resultado del POST. |
 | MOD-12 | Sin E2E real multiinstancia Android en CI (solo `flutter test` en Ubuntu). |
 
+## Reportes de publicaciones — Fase 5.4F-5C
+
+Flujo para **vecinos autenticados** que reportan una publicación comunitaria publicada. El cliente no afirma resolución ni moderación automática.
+
+### Funcionalidad
+
+1. En el detalle de una publicación **publicada**, con sesión activa, aparece **Reportar publicación**.
+2. El formulario ofrece motivos **locales** `spam` e `inappropriate` (catálogo provisional de la app; no es un enum municipal ni un catálogo oficial del backend).
+3. El campo **Detalles** es opcional (máx. 2000 caracteres; no se trunca en silencio).
+4. **Enviar reporte** abre una confirmación explícita. El POST **no** se ejecuta al validar, navegar ni reconstruir widgets.
+5. Tras confirmar, un único `POST`. Si el servidor responde **HTTP 201** con `{ id, status }`, la app muestra «Reporte recibido» y no exhibe el identificador interno.
+
+### Contrato
+
+`POST /api/v1/posts/{post}/reports`
+
+Request:
+
+```json
+{
+  "reason_code": "spam",
+  "details": "Contenido dudoso"
+}
+```
+
+`details` se omite si el vecino no escribe nada. Flutter **no** envía `reporter_id` ni `user_id`; el backend atribuye el reporte al token Sanctum.
+
+Response (201):
+
+```json
+{
+  "id": 42,
+  "status": "open"
+}
+```
+
+### Seguridad
+
+- Autenticación **Sanctum**; el backend (PostPolicy) es la autoridad de quién puede reportar.
+- Un POST por intento: sin reintentos automáticos en Dio, repositorio ni controlador.
+- Exclusión compartida por **usuario autenticado + publicación** (coordinador, no un booleano del widget).
+- Protección de sesión (`neighborhoodSessionEpoch`): un resultado tardío no se muestra como éxito en otra sesión.
+- La marca `inFlight` se persiste **antes** de despachar el POST. Si esa escritura falla, **no** se envía.
+- Si el almacenamiento local no puede interpretarse de forma fiable (JSON corrupto o un registro ilegible), se bloquean nuevos POST. No se ignoran registros malformados ni se convierte la corrupción en lista vacía.
+
+### Incertidumbre
+
+Tras despachar el POST, timeout, error de red, HTTP 5xx o un 201 malformado **no** demuestran que el servidor haya rechazado la creación. La app:
+
+- registra estado local **uncertain** (sin motivo ni detalles);
+- muestra un mensaje neutro (no afirma éxito ni fracaso definitivo);
+- **no** reintenta el POST;
+- **no** reconcilia con un GET ficticio (no hay endpoint «ya reporté»).
+
+Los 403/404/422 definitivos no dejan marca incierta y permiten corregir cuando es seguro.
+
+### Persistencia local
+
+Se guarda solo: identificador de usuario, identificador de publicación, estado (`confirmed` / `uncertain` / `inFlight` hidratado como incierto) y fecha. Sin token, sin `reason_code`, sin `details`, sin body HTTP.
+
+En **web** el almacén es en memoria (se pierde al recargar). En Android se usa el almacenamiento seguro existente.
+
+### Limitaciones
+
+- El backend **crea** un reporte en cada POST (`ReportPostService`); **no** hay idempotencia ni índice único `(reporter_id, post_id)`.
+- Otro dispositivo, o borrar los datos de la aplicación, elimina las marcas locales y puede permitir otro POST.
+- No hay endpoint para consultar si el vecino ya reportó.
+- Filament permite **consultar** reportes; **aún no** hay flujo de resolución administrativa en esta fase.
+- El catálogo de motivos de la app es provisional y local.
+
+### Riesgos residuales
+
+| ID | Descripción |
+|----|-------------|
+| RPT-P0-01 | Sin deduplicación de servidor: la protección anti-duplicado es **solo local** en este dispositivo. |
+| RPT-5C5-R1 | Si falla persistir `inFlight` **antes** del POST, no se envía; al reiniciar (sin marca en disco) el vecino puede intentar de nuevo. Ese segundo intento no duplica un POST que nunca salió. |
+| RPT-WEB | En web no hay persistencia entre recargas. |
+
+No hay deduplicación garantizada por servidor. Un reporte `open` **no** significa que ya fue resuelto.
+
 ## Subfases pendientes
 
 | Subfase | Contenido |

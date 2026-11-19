@@ -8,7 +8,9 @@ import 'package:red_vecinal/features/posts/data/models/post_attachment_upload_re
 import 'package:red_vecinal/features/posts/data/models/post_comment.dart';
 import 'package:red_vecinal/features/posts/data/models/post_detail.dart';
 import 'package:red_vecinal/features/posts/data/models/post_reaction.dart';
+import 'package:red_vecinal/features/posts/data/models/post_report_result.dart';
 import 'package:red_vecinal/features/posts/data/post_moderation_failure.dart';
+import 'package:red_vecinal/features/posts/data/post_report_validation.dart';
 import 'package:red_vecinal/features/posts/data/post_repository.dart';
 
 Map<String, dynamic> sampleCommunityPostJson({
@@ -100,6 +102,12 @@ FeedPost sampleMunicipalPost({int id = 9}) =>
 
 PostDetail sampleCommunityPostDetail({int id = 1}) =>
     PostDetail.fromJson(sampleCommunityPostJson(id: id));
+
+PostDetail postDetailWithStatus(String status, {int id = 1}) {
+  final json = Map<String, dynamic>.from(sampleCommunityPostJson(id: id));
+  json['status'] = status;
+  return PostDetail.fromJson(json);
+}
 
 PostDetail sampleMunicipalPostDetail({int id = 9}) =>
     PostDetail.fromJson(sampleMunicipalPostJson(id: id));
@@ -222,6 +230,8 @@ class FakePostGateway implements PostGateway {
     this.rejectFailureByPostId,
     this.approveDelayMs = 0,
     this.rejectDelayMs = 0,
+    this.reportDelayMs = 0,
+    this.reportFailureByPostId,
     this.onApprovePost,
     this.onRejectPost,
     this.approvedDetailByPostId,
@@ -295,6 +305,7 @@ class FakePostGateway implements PostGateway {
   Map<int, Object?>? rejectFailureByPostId;
   int approveDelayMs;
   int rejectDelayMs;
+  int reportDelayMs;
   void Function(int postId)? onApprovePost;
   void Function(int postId, String reason)? onRejectPost;
   Map<int, PostDetail>? approvedDetailByPostId;
@@ -305,6 +316,10 @@ class FakePostGateway implements PostGateway {
   int approvePostCallCount = 0;
   int rejectPostCallCount = 0;
   int pendingPostsCallCount = 0;
+  int reportPostCallCount = 0;
+  Map<int, Object?>? reportFailureByPostId;
+  Map<int, PostReportResult>? reportResultByPostId;
+  final List<Map<String, dynamic>> reportPayloads = [];
   final List<Map<String, dynamic>> rejectPayloads = [];
   int uploadCallCount = 0;
   final List<Map<String, dynamic>> uploadPayloads = [];
@@ -797,6 +812,36 @@ class FakePostGateway implements PostGateway {
       title: 'Rechazada',
       body: 'Texto',
     );
+  }
+
+  @override
+  Future<PostReportResult> reportPost({
+    required int postId,
+    required String reasonCode,
+    String? details,
+  }) async {
+    reportPostCallCount++;
+    final validation = validatePostReportInput(
+      reasonCode: reasonCode,
+      details: details,
+    );
+    if (validation != null) {
+      throw validation;
+    }
+    if (reportDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: reportDelayMs));
+    }
+    final failure = reportFailureByPostId?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    reportPayloads.add({
+      'postId': postId,
+      'reason_code': reasonCode,
+      if (details != null) 'details': details,
+    });
+    return reportResultByPostId?[postId] ??
+        const PostReportResult(id: 1, status: 'open');
   }
 
   @override
