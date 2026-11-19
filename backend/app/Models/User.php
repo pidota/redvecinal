@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Domains\Municipality\Enums\MunicipalityMemberRole;
 use App\Domains\Municipality\Enums\MunicipalityMemberStatus;
 use App\Domains\Municipality\Models\MunicipalityMember;
 use App\Domains\Neighborhoods\Enums\MembershipRole;
@@ -10,15 +11,16 @@ use App\Domains\Neighborhoods\Enums\MembershipStatus;
 use App\Domains\Neighborhoods\Models\GroupMember;
 use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -109,7 +111,22 @@ class User extends Authenticatable implements FilamentUser
         return $this->municipalityMemberships()
             ->where('municipality_id', $municipalityId)
             ->where('status', MunicipalityMemberStatus::Active)
-            ->where('role', \App\Domains\Municipality\Enums\MunicipalityMemberRole::Administrador)
+            ->where('role', MunicipalityMemberRole::Administrador)
             ->exists();
+    }
+
+    /**
+     * @return Collection<int, int>
+     */
+    public function activeAdministratorMunicipalityIds(): Collection
+    {
+        if (! $this->hasRole('administrador-municipal')) {
+            return collect();
+        }
+
+        return $this->municipalityMemberships()
+            ->where('status', MunicipalityMemberStatus::Active)
+            ->where('role', MunicipalityMemberRole::Administrador)
+            ->pluck('municipality_id');
     }
 }

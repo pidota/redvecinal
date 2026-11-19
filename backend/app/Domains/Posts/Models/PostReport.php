@@ -2,6 +2,7 @@
 
 namespace App\Domains\Posts\Models;
 
+use App\Domains\Municipality\Models\Municipality;
 use App\Domains\Posts\Enums\PostReportStatus;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -30,9 +31,23 @@ class PostReport extends Model
         ];
     }
 
+    public static function labelForReasonCode(?string $code): string
+    {
+        return match ($code) {
+            'spam' => 'Spam o publicidad no deseada',
+            'inappropriate' => 'Contenido inapropiado',
+            default => (string) $code,
+        };
+    }
+
     public function post(): BelongsTo
     {
-        return $this->belongsTo(Post::class);
+        return $this->belongsTo(Post::class)->withTrashed();
+    }
+
+    public function municipality(): BelongsTo
+    {
+        return $this->belongsTo(Municipality::class);
     }
 
     public function comment(): BelongsTo

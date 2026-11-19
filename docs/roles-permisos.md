@@ -40,7 +40,18 @@ Esto evita retirar permisos mientras el usuario siga siendo administrador en otr
 
 ## Permisos
 
-Definidos en `RolesAndPermissionsSeeder` (`municipalities.view`, `neighborhood-groups.*`, `group-members.*`, `group-presidents.assign`, `chat.reports.view`, `chat.reports.resolve`, `chat.stats.view`).
+Definidos en `RolesAndPermissionsSeeder` (`municipalities.view`, `neighborhood-groups.*`, `group-members.*`, `group-presidents.assign`, `posts.municipal.*`, `posts.community.*`, `posts.reports.view`, `posts.reports.resolve`, `chat.reports.view`, `chat.reports.resolve`, `chat.stats.view`).
+
+### Publicaciones — reportes (Fase 5D)
+
+| Permiso | Uso |
+|---------|-----|
+| `posts.reports.view` | Ver bandeja y detalle de reportes de contenido en Filament |
+| `posts.reports.resolve` | Tomar en revisión, resolver o descartar un reporte (`TransitionPostReportService`) |
+
+El superadministrador **no** omite estos permisos: sin `posts.reports.view` no ve la bandeja; sin `posts.reports.resolve` no ejecuta transiciones. El administrador municipal necesita el permiso Spatie **y** membresía activa `administrador` en el municipio del reporte. La resolución administrativa en Filament se implementó en 5D; la documentación previa que afirmaba lo contrario quedó desactualizada.
+
+Resolver un reporte es independiente de `posts.community.hide` / `posts.municipal.hide`.
 
 ### Chat (Fase 4)
 

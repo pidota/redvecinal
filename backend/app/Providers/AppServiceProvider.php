@@ -2,24 +2,26 @@
 
 namespace App\Providers;
 
-use App\Domains\Municipality\Models\MunicipalityMember;
-use App\Domains\Municipality\Observers\MunicipalityMemberObserver;
-use App\Domains\Municipality\Policies\MunicipalityMemberPolicy;
-use App\Domains\Neighborhoods\Models\GroupMember;
-use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
-use App\Domains\Neighborhoods\Models\NeighborhoodMembershipRequest;
-use App\Domains\Neighborhoods\Policies\GroupMemberPolicy;
-use App\Domains\Neighborhoods\Policies\NeighborhoodGroupPolicy;
-use App\Domains\Neighborhoods\Policies\NeighborhoodMembershipRequestPolicy;
 use App\Domains\Chat\Models\ChatMessage;
 use App\Domains\Chat\Models\ChatMessageReport;
 use App\Domains\Chat\Models\ChatRoom;
 use App\Domains\Chat\Policies\ChatMessagePolicy;
 use App\Domains\Chat\Policies\ChatMessageReportPolicy;
 use App\Domains\Chat\Policies\ChatRoomPolicy;
+use App\Domains\Municipality\Models\MunicipalityMember;
+use App\Domains\Municipality\Observers\MunicipalityMemberObserver;
+use App\Domains\Municipality\Policies\MunicipalityMemberPolicy;
+use App\Domains\Neighborhoods\Models\GroupMember;
+use App\Domains\Neighborhoods\Models\NeighborhoodGroup;
+use App\Domains\Neighborhoods\Models\NeighborhoodMembershipRequest;
 use App\Domains\Neighborhoods\Observers\NeighborhoodGroupChatObserver;
+use App\Domains\Neighborhoods\Policies\GroupMemberPolicy;
+use App\Domains\Neighborhoods\Policies\NeighborhoodGroupPolicy;
+use App\Domains\Neighborhoods\Policies\NeighborhoodMembershipRequestPolicy;
 use App\Domains\Posts\Models\Post;
+use App\Domains\Posts\Models\PostReport;
 use App\Domains\Posts\Policies\PostPolicy;
+use App\Domains\Posts\Policies\PostReportPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -71,6 +73,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(NeighborhoodMembershipRequest::class, NeighborhoodMembershipRequestPolicy::class);
         Gate::policy(MunicipalityMember::class, MunicipalityMemberPolicy::class);
         Gate::policy(Post::class, PostPolicy::class);
+        Gate::policy(PostReport::class, PostReportPolicy::class);
         Gate::policy(ChatRoom::class, ChatRoomPolicy::class);
         Gate::policy(ChatMessage::class, ChatMessagePolicy::class);
         Gate::policy(ChatMessageReport::class, ChatMessageReportPolicy::class);
