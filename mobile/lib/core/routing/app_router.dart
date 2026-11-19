@@ -20,6 +20,8 @@ import '../../features/posts/presentation/create_post_screen.dart';
 import '../../features/posts/presentation/edit_post_screen.dart';
 import '../../features/posts/presentation/my_posts_screen.dart';
 import '../../features/posts/presentation/post_detail_screen.dart';
+import '../../features/posts/presentation/post_moderation_review_screen.dart';
+import '../../features/posts/presentation/post_pending_queue_screen.dart';
 import '../../features/posts/presentation/posts_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import 'main_shell_scaffold.dart';
@@ -126,6 +128,41 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                         return const NeighborhoodDetailInvalidRouteScreen();
                       }
                       return NeighborhoodJoinScreen(groupId: id);
+                    },
+                  ),
+                  GoRoute(
+                    path: ':groupId/posts/pending/:postId',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) {
+                      final groupRaw = state.pathParameters['groupId'] ?? '';
+                      final postRaw = state.pathParameters['postId'] ?? '';
+                      final groupId = int.tryParse(groupRaw);
+                      final postId = int.tryParse(postRaw);
+                      if (groupId == null || postId == null) {
+                        return const NeighborhoodDetailInvalidRouteScreen();
+                      }
+                      final groupName = state.uri.queryParameters['groupName'];
+                      return PostModerationReviewScreen(
+                        groupId: groupId,
+                        postId: postId,
+                        groupName: groupName,
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: ':groupId/posts/pending',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) {
+                      final raw = state.pathParameters['groupId'] ?? '';
+                      final id = int.tryParse(raw);
+                      if (id == null) {
+                        return const NeighborhoodDetailInvalidRouteScreen();
+                      }
+                      final groupName = state.uri.queryParameters['groupName'];
+                      return PostPendingQueueScreen(
+                        groupId: id,
+                        groupName: groupName,
+                      );
                     },
                   ),
                   GoRoute(

@@ -1,6 +1,6 @@
 # Red Vecinal — app móvil (Flutter)
 
-Cliente comunitario para la API Laravel (`/api/v1`). **Fase 5.2B:** autenticación Sanctum (login, `/me`, logout, sesión segura). Las pantallas de juntas/publicaciones/chat siguen conceptuales.
+Cliente comunitario para la API Laravel (`/api/v1`). **Fase 5.2B:** autenticación Sanctum. **5.3.x–5.4F-5B:** juntas, feed, edición propia y moderación comunitaria móvil (ver secciones siguientes). Chat sigue pendiente de integración Reverb.
 
 ## Requisitos
 
@@ -197,6 +197,95 @@ Contratos API usados por el cliente (base `API_BASE_URL` = `…/api/v1`):
 
 Estados editables en app: `draft` y `rejected`. Tras submit exitoso el post pasa a `pending` y el editor deja de ser editable.
 
+## Moderación de publicaciones comunitarias (5.4F-5B)
+
+Flujo para **presidentes y moderadores** autorizados por el backend (no inferidos solo desde la app).
+
+### Flujo de usuario
+
+1. **Mis juntas** → detalle de junta (`/neighborhoods/{groupId}`).
+2. Si la junta está **activa** y el sondeo de permiso lo permite, aparece **Moderar publicaciones**.
+3. Cola de pendientes (`/neighborhoods/{groupId}/posts/pending?groupName=…`).
+4. Detalle de revisión (`/neighborhoods/{groupId}/posts/pending/{postId}`).
+5. **Aprobar** o **Rechazar** (con confirmación y reglas de concurrencia).
+6. Volver a la cola o al detalle de junta (`go_router` / `parentNavigatorKey`).
+
+También se puede abrir la cola por **deep link**; la autorización definitiva la valida el backend en cada pantalla.
+
+### Roles autorizados (backend)
+
+- Quién puede moderar lo define **PostPolicy** en Laravel (presidente/moderador activos de la junta, etc.).
+- El cliente **no** recibe rol comunitario en `GET /me/groups` ni en el detalle de junta.
+- Un miembro normal no debe ver la entrada si el sondeo responde **403**.
+
+### Endpoints utilizados
+
+| Acción | Método y ruta |
+|--------|----------------|
+| Sondeo / cola (pág. 1+) | `GET /groups/{groupId}/posts/pending?page=` |
+| Detalle en moderación | `GET /posts/{postId}` |
+| Aprobar | `POST /posts/{postId}/approve` (sin body en el cliente actual) |
+| Rechazar | `POST /posts/{postId}/reject` (`rejection_reason` obligatorio) |
+
+Otros usados en el mismo dominio: `GET /me/groups`, `GET /groups/{id}` (detalle de junta).
+
+### Propuestas nuevas vs enmiendas
+
+- La cola puede incluir publicaciones nuevas en revisión y **enmiendas** de contenido ya publicado.
+- El modelo parsea `pending_content`, adjuntos pendientes y título pendiente; entradas sin contenido pendiente válido se **omiten** de la lista (con `debugPrint` solo en modo debug).
+
+### Aprobación y rechazo
+
+- **Aprobar:** confirmación, bloqueo mutuo con rechazo, `ref.keepAlive()` durante el POST.
+- **Rechazar:** diálogo con motivo obligatorio (validación local + 422 del servidor).
+
+### Motivo obligatorio de rechazo
+
+- Longitud y vacío validados en cliente (`validatePostRejectionReason`).
+- El motivo se envía en el POST; **no** se persiste en almacenamiento local tras cerrar sesión.
+
+### Exclusión mutua
+
+- Durante approve o reject en curso, la otra acción queda deshabilitada en UI y controlador (`_activeDecisionGeneration`).
+
+### Incertidumbre y reconciliación
+
+- Tras POST con resultado ambiguo (red/timeout), se registra estado **incierto** en memoria (`PostModerationUncertainApprovePersistence`), atado a `userId` + `sessionEpoch`.
+- La UI ofrece reconciliación (reconsultar `GET /posts/{id}`) antes de permitir otra decisión.
+- **No** hay reintentos automáticos de POST ambiguos.
+
+### Seguridad de sesión
+
+- Controladores de cola, detalle y descubrimiento usan `neighborhoodSessionEpoch` (y `authController` donde aplica).
+- Tras `await`, se descartan respuestas si cambió la sesión o el usuario.
+- Logout limpia persistencia incierta de moderación en memoria.
+
+### Descubrimiento desde detalle de junta (5B.8)
+
+**Contratos insuficientes para permisos locales:**
+
+- `GET /me/groups` devuelve junta (`id`, `name`, `status`, etc.) **sin** rol de membresía.
+- **`GET /me/reviewable-groups` NO debe usarse** para moderación de publicaciones (solo solicitudes de incorporación).
+
+**Sondeo autorizado (una junta, página 1):**
+
+- Si `status == active`, el cliente llama una vez a `GET /groups/{id}/posts/pending?page=1`.
+- **200:** mostrar entrada «Moderar publicaciones».
+- **403 / 404:** no mostrar entrada.
+- **Red / timeout / 5xx:** autorización **indeterminada**; la entrada permanece oculta (el usuario aún puede llegar por deep link; la cola aplicará 403/404).
+
+El **backend sigue siendo la autoridad definitiva** en cola, detalle y decisiones.
+
+### Riesgos residuales (no resueltos en app)
+
+| ID | Descripción |
+|----|-------------|
+| **MOD-08** | `approve` / `reject` no envían `revision_id`; el cliente no puede garantizar que la revisión procesada sea exactamente la mostrada en pantalla. |
+| MOD-09 | Al abrir la cola desde detalle: posible **doble GET** (sondeo + carga de `PostPendingQueueController`). |
+| MOD-10 | Fallo de red en sondeo oculta la entrada aunque el usuario sea moderador. |
+| MOD-11 | Reconciliación sin atribución causal perfecta del resultado del POST. |
+| MOD-12 | Sin E2E real multiinstancia Android en CI (solo `flutter test` en Ubuntu). |
+
 ## Subfases pendientes
 
 | Subfase | Contenido |
@@ -204,7 +293,7 @@ Estados editables en app: `draft` y `rejected`. Tras submit exitoso el post pasa
 | 5.2 | Autenticación Sanctum (completada en app) |
 | 5.3.1 | Mis juntas (`GET /me/groups`) |
 | 5.3.2+ | Explorar, detalle, integrantes |
-| 5.4 | Publicaciones y moderación |
+| 5.4 | Publicaciones (feed, detalle, edición propia; moderación 5.4F-5B en app) |
 | 5.5 | Chat + Reverb |
 | 5.6 | Integración, pruebas E2E, estabilización |
 

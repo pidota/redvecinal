@@ -9,6 +9,7 @@ import '../../../shared/widgets/rv_empty_state.dart';
 import '../application/group_detail_controller.dart';
 import 'widgets/group_status_chip.dart';
 import 'widgets/neighborhood_api_error.dart';
+import 'widgets/post_moderation_detail_entry.dart';
 
 class NeighborhoodDetailScreen extends ConsumerWidget {
   const NeighborhoodDetailScreen({required this.groupId, super.key});
@@ -33,7 +34,10 @@ class NeighborhoodDetailScreen extends ConsumerWidget {
               title: 'Acceso denegado',
               message: error.userMessage,
               icon: Icons.lock_outline,
-              action: TextButton(onPressed: () => context.pop(), child: const Text('Volver')),
+              action: TextButton(
+                onPressed: () => context.pop(),
+                child: const Text('Volver'),
+              ),
             );
           }
           if (error is ApiNotFoundFailure) {
@@ -41,13 +45,20 @@ class NeighborhoodDetailScreen extends ConsumerWidget {
               title: 'Junta no encontrada',
               message: error.userMessage,
               icon: Icons.search_off_outlined,
-              action: TextButton(onPressed: () => context.pop(), child: const Text('Volver')),
+              action: TextButton(
+                onPressed: () => context.pop(),
+                child: const Text('Volver'),
+              ),
             );
           }
           return NeighborhoodApiError(
             title: 'No pudimos cargar el detalle',
             failure: error is ApiFailure ? error : const ApiUnexpectedFailure(),
-            onRetry: () => ref.read(groupDetailControllerProvider(groupId).notifier).refresh(),
+            onRetry:
+                () =>
+                    ref
+                        .read(groupDetailControllerProvider(groupId).notifier)
+                        .refresh(),
           );
         },
         data: (group) {
@@ -62,7 +73,10 @@ class NeighborhoodDetailScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Text(group.name, style: theme.textTheme.headlineSmall),
+                          child: Text(
+                            group.name,
+                            style: theme.textTheme.headlineSmall,
+                          ),
                         ),
                         GroupStatusChip(status: group.status),
                       ],
@@ -74,13 +88,15 @@ class NeighborhoodDetailScreen extends ConsumerWidget {
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    if (group.address != null && group.address!.trim().isNotEmpty) ...[
+                    if (group.address != null &&
+                        group.address!.trim().isNotEmpty) ...[
                       const SizedBox(height: RvSpacing.md),
                       Text('Dirección', style: theme.textTheme.labelLarge),
                       const SizedBox(height: RvSpacing.xs),
                       Text(group.address!.trim()),
                     ],
-                    if (group.description != null && group.description!.trim().isNotEmpty) ...[
+                    if (group.description != null &&
+                        group.description!.trim().isNotEmpty) ...[
                       const SizedBox(height: RvSpacing.md),
                       Text('Descripción', style: theme.textTheme.labelLarge),
                       const SizedBox(height: RvSpacing.xs),
@@ -89,6 +105,7 @@ class NeighborhoodDetailScreen extends ConsumerWidget {
                   ],
                 ),
               ),
+              PostModerationDetailEntry(group: group),
             ],
           );
         },

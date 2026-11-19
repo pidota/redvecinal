@@ -8,6 +8,7 @@ import 'package:red_vecinal/features/posts/data/models/post_attachment_upload_re
 import 'package:red_vecinal/features/posts/data/models/post_comment.dart';
 import 'package:red_vecinal/features/posts/data/models/post_detail.dart';
 import 'package:red_vecinal/features/posts/data/models/post_reaction.dart';
+import 'package:red_vecinal/features/posts/data/post_moderation_failure.dart';
 import 'package:red_vecinal/features/posts/data/post_repository.dart';
 
 Map<String, dynamic> sampleCommunityPostJson({
@@ -213,6 +214,18 @@ class FakePostGateway implements PostGateway {
     this.onUpdatePost,
     this.updatedDetailByPostId,
     this.submittedDetailByPostId,
+    this.pendingPostsByGroupId,
+    this.pendingPostsPagesByGroupId,
+    this.pendingPostsFailureByGroupId,
+    this.pendingPostsDelayMs = 0,
+    this.approveFailureByPostId,
+    this.rejectFailureByPostId,
+    this.approveDelayMs = 0,
+    this.rejectDelayMs = 0,
+    this.onApprovePost,
+    this.onRejectPost,
+    this.approvedDetailByPostId,
+    this.rejectedDetailByPostId,
   }) : feedPage =
            feedPage ??
            PaginatedFeedPosts(
@@ -274,8 +287,25 @@ class FakePostGateway implements PostGateway {
   onUpdatePost;
   Map<int, PostDetail>? updatedDetailByPostId;
   Map<int, PostDetail>? submittedDetailByPostId;
+  Map<int, PaginatedFeedPosts>? pendingPostsByGroupId;
+  Map<int, Map<int, PaginatedFeedPosts>>? pendingPostsPagesByGroupId;
+  Map<int, Object?>? pendingPostsFailureByGroupId;
+  int pendingPostsDelayMs;
+  Map<int, Object?>? approveFailureByPostId;
+  Map<int, Object?>? rejectFailureByPostId;
+  int approveDelayMs;
+  int rejectDelayMs;
+  void Function(int postId)? onApprovePost;
+  void Function(int postId, String reason)? onRejectPost;
+  Map<int, PostDetail>? approvedDetailByPostId;
+  Map<int, PostDetail>? rejectedDetailByPostId;
 
   int detailCallCount = 0;
+  int listPendingPostsCallCount = 0;
+  int approvePostCallCount = 0;
+  int rejectPostCallCount = 0;
+  int pendingPostsCallCount = 0;
+  final List<Map<String, dynamic>> rejectPayloads = [];
   int uploadCallCount = 0;
   final List<Map<String, dynamic>> uploadPayloads = [];
   int downloadCallCount = 0;
@@ -566,8 +596,7 @@ class FakePostGateway implements PostGateway {
       json['status'] = existing.status;
       json['content'] = null;
       json['working_content'] = {
-        'revision_id':
-            existing.editableRevisionId ?? revisionId,
+        'revision_id': existing.editableRevisionId ?? revisionId,
         'title': existing.workingContent?.title ?? 'T',
         'body': existing.workingContent?.body ?? 'B',
       };
@@ -689,6 +718,85 @@ class FakePostGateway implements PostGateway {
       return next;
     }
     return pendingPostDetail(id: postId);
+  }
+
+  @override
+  Future<PaginatedFeedPosts> listPendingPosts({
+    required int groupId,
+    int page = 1,
+  }) async {
+    listPendingPostsCallCount++;
+    pendingPostsCallCount++;
+    if (pendingPostsDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: pendingPostsDelayMs));
+    }
+    final failure = pendingPostsFailureByGroupId?[groupId];
+    if (failure != null) {
+      throw failure;
+    }
+    final byPage = pendingPostsPagesByGroupId?[groupId]?[page];
+    if (byPage != null) {
+      return byPage;
+    }
+    final preset = pendingPostsByGroupId?[groupId];
+    if (preset != null) {
+      return preset;
+    }
+    return PaginatedFeedPosts(
+      items: const [],
+      currentPage: page,
+      lastPage: page,
+    );
+  }
+
+  @override
+  Future<PostDetail> approvePost({required int postId}) async {
+    approvePostCallCount++;
+    if (approveDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: approveDelayMs));
+    }
+    final failure = approveFailureByPostId?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    onApprovePost?.call(postId);
+    final preset = approvedDetailByPostId?[postId];
+    if (preset != null) {
+      return preset;
+    }
+    return sampleCommunityPostDetail(id: postId);
+  }
+
+  @override
+  Future<PostDetail> rejectPost({
+    required int postId,
+    required String rejectionReason,
+  }) async {
+    rejectPostCallCount++;
+    if (rejectDelayMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: rejectDelayMs));
+    }
+    final validation = validatePostRejectionReason(rejectionReason);
+    if (validation != null) {
+      throw validation;
+    }
+    final failure = rejectFailureByPostId?[postId];
+    if (failure != null) {
+      throw failure;
+    }
+    onRejectPost?.call(postId, rejectionReason);
+    rejectPayloads.add({'postId': postId, 'rejection_reason': rejectionReason});
+    final preset = rejectedDetailByPostId?[postId];
+    if (preset != null) {
+      return preset;
+    }
+    return rejectedPostDetail(
+      id: postId,
+      groupId: 2,
+      categoryId: 2,
+      title: 'Rechazada',
+      body: 'Texto',
+    );
   }
 
   @override
@@ -832,4 +940,121 @@ PostDetail detailWithEngagement({
     'my_reaction': myReactionType == null ? null : {'type': myReactionType},
   };
   return PostDetail.fromJson(json);
+}
+
+Map<String, dynamic> pendingQueuePostJson({
+  required int id,
+  String title = 'Propuesta pendiente',
+  String body = 'Texto enviado a moderación',
+}) {
+  return {
+    'id': id,
+    'post_kind': 'community',
+    'status': 'pending',
+    'has_pending_amendment': false,
+    'published_at': null,
+    'author': {'id': 42, 'name': 'Vecino autor'},
+    'neighborhood_group': {
+      'id': 5,
+      'name': 'Junta Norte',
+      'slug': 'junta-norte',
+    },
+    'category': {
+      'id': 2,
+      'slug': 'aviso-comunitario',
+      'name': 'Aviso comunitario',
+    },
+    'municipality': {'id': 1, 'name': 'Chépica', 'slug': 'chepica'},
+    'content': null,
+    'pending_content': {
+      'revision_id': id * 10,
+      'title': title,
+      'body': body,
+      'body_html': '<p>$body</p>',
+    },
+    'working_content': null,
+    'engagement': {
+      'comments_count': 0,
+      'reactions_count': 0,
+      'my_reaction': null,
+    },
+    'attachments': [],
+    'pending_attachments': [
+      {
+        'id': 91,
+        'revision_id': id * 10,
+        'original_display_name': 'propuesta.pdf',
+        'mime_type': 'application/pdf',
+        'size_bytes': 2048,
+        'download_url': '/api/v1/posts/$id/attachments/91',
+      },
+    ],
+  };
+}
+
+Map<String, dynamic> pendingAmendmentPostJson({
+  required int id,
+  String publishedTitle = 'Título publicado',
+  String publishedBody = 'Cuerpo publicado',
+  String pendingTitle = 'Título enmienda',
+  String pendingBody = 'Cuerpo enmienda',
+}) {
+  return {
+    'id': id,
+    'post_kind': 'community',
+    'status': 'published',
+    'has_pending_amendment': true,
+    'published_at': '2026-11-10T09:00:00+00:00',
+    'author': {'id': 42, 'name': 'Vecino autor'},
+    'neighborhood_group': {
+      'id': 5,
+      'name': 'Junta Norte',
+      'slug': 'junta-norte',
+    },
+    'category': {
+      'id': 2,
+      'slug': 'aviso-comunitario',
+      'name': 'Aviso comunitario',
+    },
+    'municipality': {'id': 1, 'name': 'Chépica', 'slug': 'chepica'},
+    'content': {
+      'revision_id': 50,
+      'title': publishedTitle,
+      'body': publishedBody,
+      'body_html': '<p>$publishedBody</p>',
+      'category_id': 2,
+    },
+    'pending_content': {
+      'revision_id': 51,
+      'title': pendingTitle,
+      'body': pendingBody,
+      'body_html': '<p>$pendingBody</p>',
+    },
+    'working_content': null,
+    'engagement': {
+      'comments_count': 2,
+      'reactions_count': 1,
+      'my_reaction': null,
+    },
+    'attachments': [
+      {
+        'id': 7,
+        'revision_id': 50,
+        'original_display_name': 'vivo.pdf',
+        'mime_type': 'application/pdf',
+        'size_bytes': 1024,
+        'download_url': '/api/v1/posts/$id/attachments/7',
+      },
+    ],
+    'pending_attachments': [
+      {
+        'id': 8,
+        'revision_id': 51,
+        'original_display_name': 'enmienda.pdf',
+        'mime_type': 'application/pdf',
+        'size_bytes': 4096,
+        'download_url': '/api/v1/posts/$id/attachments/8',
+      },
+    ],
+  };
 }

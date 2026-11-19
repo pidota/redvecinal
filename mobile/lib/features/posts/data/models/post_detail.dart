@@ -107,6 +107,7 @@ class PostDetail {
     required this.content,
     required this.engagement,
     required this.attachments,
+    this.pendingAttachments = const [],
     required this.commentsEnabled,
     this.workingContent,
     this.pendingContent,
@@ -121,6 +122,7 @@ class PostDetail {
     final contentRaw = json['content'];
     final engagementRaw = json['engagement'];
     final attachmentsRaw = json['attachments'];
+    final pendingAttachmentsRaw = json['pending_attachments'];
     final workingRaw = json['working_content'];
     final pendingRaw = json['pending_content'];
 
@@ -162,6 +164,13 @@ class PostDetail {
                   .map(PostAttachment.fromJson)
                   .toList()
               : const [],
+      pendingAttachments:
+          pendingAttachmentsRaw is List
+              ? pendingAttachmentsRaw
+                  .whereType<Map<String, dynamic>>()
+                  .map(PostAttachment.fromJson)
+                  .toList()
+              : const [],
       workingContent:
           workingRaw is Map<String, dynamic>
               ? PostWorkingContent.fromJson(workingRaw)
@@ -185,6 +194,7 @@ class PostDetail {
   final PostDetailContent? content;
   final FeedPostEngagement engagement;
   final List<PostAttachment> attachments;
+  final List<PostAttachment> pendingAttachments;
   final PostWorkingContent? workingContent;
   final PostDetailContent? pendingContent;
   final bool hasPendingAmendment;
@@ -208,6 +218,7 @@ class PostDetail {
       content: content,
       engagement: engagement,
       attachments: attachments,
+      pendingAttachments: pendingAttachments,
       commentsEnabled: commentsEnabled,
       workingContent: workingContent,
       pendingContent: pendingContent,

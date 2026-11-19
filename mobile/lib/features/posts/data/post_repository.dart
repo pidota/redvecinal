@@ -12,6 +12,7 @@ import 'models/post_detail.dart';
 import 'models/post_category.dart';
 import 'models/post_attachment_upload_result.dart';
 import 'models/post_reaction.dart';
+import 'post_moderation_failure.dart';
 
 abstract class PostGateway {
   Future<PaginatedFeedPosts> listPosts({
@@ -73,6 +74,18 @@ abstract class PostGateway {
   });
 
   Future<PaginatedFeedPosts> listMyPosts({int page = 1});
+
+  Future<PaginatedFeedPosts> listPendingPosts({
+    required int groupId,
+    int page = 1,
+  });
+
+  Future<PostDetail> approvePost({required int postId});
+
+  Future<PostDetail> rejectPost({
+    required int postId,
+    required String rejectionReason,
+  });
 }
 
 final postRepositoryProvider = Provider<PostGateway>((ref) {
@@ -111,21 +124,7 @@ class PostRepository implements PostGateway {
         );
       }
 
-      final meta = payload['meta'];
-      final currentPage =
-          meta is Map<String, dynamic>
-              ? (meta['current_page'] as int? ?? page)
-              : page;
-      final lastPage =
-          meta is Map<String, dynamic>
-              ? (meta['last_page'] as int? ?? currentPage)
-              : currentPage;
-
-      return PaginatedFeedPosts(
-        items: _parsePostList(payload['data']),
-        currentPage: currentPage,
-        lastPage: lastPage,
-      );
+      return _parsePaginatedFeedPosts(payload, page);
     } on DioException catch (e) {
       throw mapDioError(e, loginRequest: false);
     }
@@ -149,18 +148,7 @@ class PostRepository implements PostGateway {
     try {
       final response = await _dio.get<Map<String, dynamic>>('/posts/$postId');
 
-      final payload = response.data;
-      if (response.statusCode == 200 && payload != null) {
-        final data = payload['data'];
-        if (data is Map<String, dynamic>) {
-          return PostDetail.fromJson(data);
-        }
-      }
-
-      throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-      );
+      return _parsePostDetailResponse(response);
     } on DioException catch (e) {
       throw mapDioError(e, loginRequest: false);
     }
@@ -536,24 +524,139 @@ class PostRepository implements PostGateway {
         );
       }
 
-      final meta = payload['meta'];
-      final currentPage =
-          meta is Map<String, dynamic>
-              ? (meta['current_page'] as int? ?? page)
-              : page;
-      final lastPage =
-          meta is Map<String, dynamic>
-              ? (meta['last_page'] as int? ?? currentPage)
-              : currentPage;
+      return _parsePaginatedFeedPosts(payload, page);
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
 
-      return PaginatedFeedPosts(
-        items: _parsePostList(payload['data']),
-        currentPage: currentPage,
-        lastPage: lastPage,
+  @override
+  Future<PaginatedFeedPosts> listPendingPosts({
+    required int groupId,
+    int page = 1,
+  }) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/groups/$groupId/posts/pending',
+        queryParameters: {'page': page},
+      );
+
+      final payload = response.data;
+      if (response.statusCode != 200 || payload == null) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+        );
+      }
+
+      return _parsePaginatedFeedPosts(payload, page);
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  @override
+  Future<PostDetail> approvePost({required int postId}) async {
+    _ensureConfigured();
+
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/posts/$postId/approve',
+      );
+
+      final status = response.statusCode ?? 0;
+      final payload = response.data;
+      if (status == 200 && payload != null) {
+        return _parsePostDetailFromMap(payload);
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
       );
     } on DioException catch (e) {
       throw mapDioError(e, loginRequest: false);
     }
+  }
+
+  @override
+  Future<PostDetail> rejectPost({
+    required int postId,
+    required String rejectionReason,
+  }) async {
+    _ensureConfigured();
+
+    final validation = validatePostRejectionReason(rejectionReason);
+    if (validation != null) {
+      throw validation;
+    }
+
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/posts/$postId/reject',
+        data: {'rejection_reason': rejectionReason},
+      );
+
+      final status = response.statusCode ?? 0;
+      final payload = response.data;
+      if (status == 200 && payload != null) {
+        return _parsePostDetailFromMap(payload);
+      }
+
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    } on DioException catch (e) {
+      throw mapDioError(e, loginRequest: false);
+    }
+  }
+
+  PaginatedFeedPosts _parsePaginatedFeedPosts(
+    Map<String, dynamic> payload,
+    int page,
+  ) {
+    final meta = payload['meta'];
+    final currentPage =
+        meta is Map<String, dynamic>
+            ? (meta['current_page'] as int? ?? page)
+            : page;
+    final lastPage =
+        meta is Map<String, dynamic>
+            ? (meta['last_page'] as int? ?? currentPage)
+            : currentPage;
+
+    return PaginatedFeedPosts(
+      items: _parsePostList(payload['data']),
+      currentPage: currentPage,
+      lastPage: lastPage,
+    );
+  }
+
+  PostDetail _parsePostDetailResponse(Response<Map<String, dynamic>> response) {
+    final payload = response.data;
+    if (response.statusCode == 200 && payload != null) {
+      return _parsePostDetailFromMap(payload);
+    }
+
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+    );
+  }
+
+  PostDetail _parsePostDetailFromMap(Map<String, dynamic> payload) {
+    final data = payload['data'];
+    if (data is Map<String, dynamic>) {
+      return PostDetail.fromJson(data);
+    }
+    if (payload.containsKey('id')) {
+      return PostDetail.fromJson(payload);
+    }
+
+    throw const ApiUnexpectedFailure();
   }
 
   void _ensureConfigured() {

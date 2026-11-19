@@ -138,6 +138,9 @@ class FeedPostAttachmentMeta {
     required this.id,
     required this.originalDisplayName,
     required this.mimeType,
+    this.revisionId,
+    this.sizeBytes,
+    this.downloadUrl,
   });
 
   factory FeedPostAttachmentMeta.fromJson(Map<String, dynamic> json) {
@@ -145,12 +148,18 @@ class FeedPostAttachmentMeta {
       id: json['id'] as int,
       originalDisplayName: json['original_display_name'] as String,
       mimeType: json['mime_type'] as String,
+      revisionId: json['revision_id'] as int?,
+      sizeBytes: json['size_bytes'] as int?,
+      downloadUrl: json['download_url'] as String?,
     );
   }
 
   final int id;
   final String originalDisplayName;
   final String mimeType;
+  final int? revisionId;
+  final int? sizeBytes;
+  final String? downloadUrl;
 }
 
 class FeedPost {
@@ -166,6 +175,7 @@ class FeedPost {
     required this.content,
     required this.engagement,
     required this.attachments,
+    this.pendingAttachments = const [],
     this.workingContent,
     this.pendingContent,
     this.hasPendingAmendment = false,
@@ -181,6 +191,7 @@ class FeedPost {
     final pendingRaw = json['pending_content'];
     final engagementRaw = json['engagement'];
     final attachmentsRaw = json['attachments'];
+    final pendingAttachmentsRaw = json['pending_attachments'];
 
     return FeedPost(
       id: json['id'] as int,
@@ -227,6 +238,13 @@ class FeedPost {
                   .map(FeedPostAttachmentMeta.fromJson)
                   .toList()
               : const [],
+      pendingAttachments:
+          pendingAttachmentsRaw is List
+              ? pendingAttachmentsRaw
+                  .whereType<Map<String, dynamic>>()
+                  .map(FeedPostAttachmentMeta.fromJson)
+                  .toList()
+              : const [],
     );
   }
 
@@ -241,6 +259,7 @@ class FeedPost {
   final FeedPostContent? content;
   final FeedPostEngagement engagement;
   final List<FeedPostAttachmentMeta> attachments;
+  final List<FeedPostAttachmentMeta> pendingAttachments;
   final PostWorkingContent? workingContent;
   final FeedPostContent? pendingContent;
   final bool hasPendingAmendment;
