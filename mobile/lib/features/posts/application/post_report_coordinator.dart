@@ -36,6 +36,7 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
 
   int _nextGeneration = 1;
   Future<void>? _hydrateFuture;
+  Future<void> _stripStaleChain = Future<void>.value();
   Future<bool> _persistChain = Future<bool>.value(true);
 
   @override
@@ -49,6 +50,9 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
   Future<void> ensureHydrated() {
     final existing = _hydrateFuture;
     if (existing != null) {
+      if (state.hydrated) {
+        return _stripStaleConfirmedPayloads();
+      }
       return existing;
     }
     final future = _hydrate();
@@ -92,6 +96,7 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
       if (convertedUncertain || migratedLegacy) {
         await _enqueuePersist();
       }
+      await _stripStaleConfirmedPayloads();
     } on Object {
       state = const PostReportCoordinatorState(
         hydrated: true,
@@ -255,6 +260,38 @@ class PostReportCoordinator extends Notifier<PostReportCoordinatorState> {
     if (!stripped && after.status == PostReportOutcomeStatus.confirmed) {
       _put(confirmed);
     }
+  }
+
+  /// Reintenta borrar payload de `confirmed` si una limpieza previa falló.
+  /// No degrada a `uncertain`, no genera UUID ni POST.
+  Future<void> _stripStaleConfirmedPayloads() {
+    final next = _stripStaleChain.then((_) async {
+      if (!state.hydrated || state.persistUnavailable) {
+        return;
+      }
+      final stale =
+          state.records.values
+              .where(
+                (record) =>
+                    record.status == PostReportOutcomeStatus.confirmed &&
+                    (record.hasRecoverableAttempt ||
+                        record.idempotencyKey != null ||
+                        record.reasonCode != null ||
+                        record.details != null),
+              )
+              .toList();
+      for (final record in stale) {
+        final current = state.recordFor(record.userId, record.postId);
+        if (current == null ||
+            current.generation != record.generation ||
+            current.status != PostReportOutcomeStatus.confirmed) {
+          continue;
+        }
+        await _stripConfirmedPayload(current);
+      }
+    });
+    _stripStaleChain = next;
+    return next;
   }
 
   Future<bool> markUncertain({

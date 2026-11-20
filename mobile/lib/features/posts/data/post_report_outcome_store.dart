@@ -63,7 +63,8 @@ String encodePostReportOutcomePayload(List<PostReportOutcomeRecord> records) {
 
 /// Persistencia de resultados de reporte.
 ///
-/// v2 guarda clave y payload solo mientras el intento no está confirmado.
+/// v2 guarda clave y payload mientras el intento no está confirmado.
+/// Un `confirmed` puede retenerlos si falló la limpieza; la hidratación lo reintenta.
 /// Borrar datos de la app o cambiar de dispositivo elimina esta protección local.
 abstract class PostReportOutcomeStore {
   Future<List<PostReportOutcomeRecord>> loadAll();
@@ -87,6 +88,7 @@ class InMemoryPostReportOutcomeStore implements PostReportOutcomeStore {
   bool failReads = false;
   int? failOnSaveNumber;
   Duration writeDelay = Duration.zero;
+  Duration readDelay = Duration.zero;
   int saveCount = 0;
   int loadCount = 0;
   List<PostReportOutcomeRecord> lastSaved = const [];
@@ -96,6 +98,9 @@ class InMemoryPostReportOutcomeStore implements PostReportOutcomeStore {
 
   @override
   Future<List<PostReportOutcomeRecord>> loadAll() async {
+    if (readDelay > Duration.zero) {
+      await Future<void>.delayed(readDelay);
+    }
     loadCount++;
     if (failReads) {
       throw const PostReportOutcomeStoreException('read failed');

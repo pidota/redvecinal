@@ -344,7 +344,7 @@ Los registros **v1** inciertos (sin UUID) siguen bloqueados y no se recuperan. 4
 
 ### Persistencia local
 
-Almacén `rv_post_report_outcomes_v2` (schema 2). Antes del POST: `userId`, `postId`, UUID, `reason_code`, `details`, estado, `generation`, `recordedAt`. El 201 se persiste como `confirmed` **con** payload; el payload sensible se borra solo si esa escritura terminó. Si falla, el intento sigue recuperable. Sin token ni body HTTP completo.
+Almacén `rv_post_report_outcomes_v2` (schema 2). Antes del POST: `userId`, `postId`, UUID, `reason_code`, `details`, estado, `generation`, `recordedAt`. El 201 se persiste como `confirmed` **con** payload; después se borran UUID/`reason_code`/`details` (se conserva `reportId`). Si esa limpieza falla, el estado sigue `confirmed` (bloquea duplicados) y la hidratación posterior reintenta el borrado. El almacenamiento seguro reduce el acceso casual; no impide todo acceso al dispositivo. Sin token ni body HTTP completo.
 
 Migración: si no hay v2 se lee `rv_post_report_outcomes_v1`. `confirmed` se conserva. `uncertain`/`inFlight` sin clave **no** reciben UUID inventada. v1 no se elimina.
 
