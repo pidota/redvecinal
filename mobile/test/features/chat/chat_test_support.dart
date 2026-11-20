@@ -109,6 +109,8 @@ class FakeChatGateway implements ChatGateway {
     this.history = const [],
     this.listDelay = Duration.zero,
     this.listFailure,
+    this.roomsFailure,
+    this.roomsDelay = Duration.zero,
   });
 
   List<ChatRoom> rooms;
@@ -124,10 +126,18 @@ class FakeChatGateway implements ChatGateway {
   List<ChatMessage> history = const [];
   Duration listDelay = Duration.zero;
   Object? listFailure;
+  Object? roomsFailure;
+  Duration roomsDelay = Duration.zero;
   int listCalls = 0;
 
   @override
   Future<List<ChatRoom>> listRooms({CancelToken? cancelToken}) async {
+    if (roomsDelay > Duration.zero) {
+      await Future<void>.delayed(roomsDelay);
+    }
+    if (roomsFailure != null) {
+      throw roomsFailure!;
+    }
     return rooms;
   }
 

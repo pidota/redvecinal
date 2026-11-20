@@ -5,6 +5,7 @@ import '../../auth/application/auth_controller.dart';
 import '../../neighborhoods/application/neighborhood_session.dart';
 import '../data/chat_repository.dart';
 import '../data/chat_timeline.dart';
+import '../data/models/chat_message.dart';
 import 'chat_access.dart';
 
 class ChatRoomHistoryState {
@@ -164,6 +165,21 @@ class ChatRoomHistoryController
     revokeChatRoomAccess(ref, arg);
     state = AsyncValue.data(
       ChatRoomHistoryState(roomId: arg, accessRevoked: true),
+    );
+  }
+
+  /// Incorpora un mensaje confirmado por REST sin duplicar por id/versión.
+  void ingestConfirmed(ChatMessage message) {
+    final current = state.valueOrNull;
+    if (current == null ||
+        current.accessRevoked ||
+        message.chatRoomId != arg) {
+      return;
+    }
+    state = AsyncValue.data(
+      current.copyWith(
+        timeline: current.timeline.merge([message], roomId: arg),
+      ),
     );
   }
 

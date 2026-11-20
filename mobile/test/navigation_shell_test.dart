@@ -23,7 +23,7 @@ void main() {
 
     await tester.tap(navBarIcon(Icons.forum_outlined));
     await tester.pumpAndSettle();
-    expect(find.text('Salas no sincronizadas'), findsOneWidget);
+    expect(find.text('Sin salas'), findsOneWidget);
 
     await tester.tap(navBarIcon(Icons.person_outline));
     await tester.pumpAndSettle();

@@ -16,7 +16,10 @@ import 'features/posts/post_test_support.dart';
 import 'package:red_vecinal/features/neighborhoods/data/neighborhood_repository.dart';
 import 'package:red_vecinal/features/posts/data/models/paginated_feed_posts.dart';
 import 'package:red_vecinal/features/posts/data/post_report_outcome_store.dart';
+import 'package:red_vecinal/features/chat/data/chat_repository.dart';
+import 'package:red_vecinal/features/chat/data/chat_uncertain_store.dart';
 import 'package:red_vecinal/features/posts/data/post_repository.dart';
+import 'features/chat/chat_test_support.dart';
 
 class AuthenticatedBootAuthController extends AuthController {
   @override
@@ -50,6 +53,7 @@ Future<void> openMainShellAuthenticated(
   WidgetTester tester, {
   FakeNeighborhoodGateway? neighborhoodGateway,
   FakePostGateway? postGateway,
+  FakeChatGateway? chatGateway,
 }) async {
   await pumpRedVecinalApp(
     tester,
@@ -70,6 +74,10 @@ Future<void> openMainShellAuthenticated(
               ),
             ),
       ),
+      chatRepositoryProvider.overrideWithValue(
+        chatGateway ?? FakeChatGateway(),
+      ),
+      chatUncertainStoreProvider.overrideWithValue(InMemoryChatUncertainStore()),
     ],
   );
   await tester.pumpAndSettle();

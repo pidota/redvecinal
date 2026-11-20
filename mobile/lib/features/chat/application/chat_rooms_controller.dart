@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/network/api_failure.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../neighborhoods/application/neighborhood_session.dart';
@@ -23,15 +22,11 @@ class ChatRoomsController extends AutoDisposeAsyncNotifier<List<ChatRoom>> {
   }
 
   Future<List<ChatRoom>> _loadGuarded(int epoch) async {
-    try {
-      final rooms = await ref.read(chatRepositoryProvider).listRooms();
-      if (neighborhoodSessionEpoch(ref) != epoch) {
-        return const [];
-      }
-      return rooms;
-    } on ApiSessionExpiredFailure {
+    final rooms = await ref.read(chatRepositoryProvider).listRooms();
+    if (neighborhoodSessionEpoch(ref) != epoch) {
       return const [];
     }
+    return rooms;
   }
 
   Future<void> refresh() async {

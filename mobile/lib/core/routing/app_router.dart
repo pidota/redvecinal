@@ -7,6 +7,8 @@ import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/session_retry_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
+import '../../features/chat/presentation/chat_conversation_invalid_route_screen.dart';
+import '../../features/chat/presentation/chat_conversation_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/neighborhoods/presentation/neighborhood_detail_invalid_route_screen.dart';
@@ -245,6 +247,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/chat',
                 builder: (context, state) => const ChatScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':roomId',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) {
+                      final raw = state.pathParameters['roomId'] ?? '';
+                      final id = int.tryParse(raw);
+                      if (id == null) {
+                        return const ChatConversationInvalidRouteScreen();
+                      }
+                      return ChatConversationScreen(roomId: id);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
