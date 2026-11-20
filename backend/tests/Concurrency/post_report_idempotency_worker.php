@@ -5,6 +5,7 @@ use App\Domains\Posts\Models\Post;
 use App\Domains\Posts\Services\ReportPostService;
 use App\Models\User;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concurrency\PostReportIdempotencyBarrier;
@@ -84,6 +85,9 @@ try {
     exit(0);
 } catch (PostReportIdempotencyException $e) {
     fwrite(STDOUT, 'ERR:'.$e->httpStatus."\n");
+    exit(0);
+} catch (DeadlockException $e) {
+    fwrite(STDOUT, "ERR:1213\n");
     exit(0);
 } catch (QueryException $e) {
     $driverCode = $e->errorInfo[1] ?? null;

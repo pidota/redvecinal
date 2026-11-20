@@ -94,25 +94,11 @@ class PostReportIdempotencyMysqlConcurrencyTest extends TestCase
             1,
             PostReport::query()->where('reporter_id', $reporter->id)->where('idempotency_key', self::KEY_A)->count()
         );
+        $this->assertNoRemainingLockErrors($parsed);
 
         $okIds = $this->okIds($parsed);
-        $lockErrors = $this->lockErrors($parsed);
-
-        if (count($okIds) === 2) {
-            $this->assertSame($okIds[0], $okIds[1]);
-
-            return;
-        }
-
-        if (count($okIds) === 1 && $lockErrors !== []) {
-            $this->assertNotNull($okIds[0]);
-            $this->markTestIncomplete(
-                'Escenario A: integridad OK (1 fila) pero disponibilidad concurrente no validada por lock '
-                .implode(',', $lockErrors).'. '.$this->combined($parsed)
-            );
-        }
-
-        $this->fail('Escenario A: se esperaban dos OK con el mismo id, o un OK y un error de lock. '.$this->combined($parsed));
+        $this->assertCount(2, $okIds, $this->combined($parsed));
+        $this->assertSame($okIds[0], $okIds[1]);
     }
 
     public function test_b_parallel_same_key_different_payload_conflicts(): void
@@ -127,6 +113,7 @@ class PostReportIdempotencyMysqlConcurrencyTest extends TestCase
 
         $this->assertNoUnclassifiedServerError($parsed);
         $this->assertSame(1, PostReport::query()->where('reporter_id', $reporter->id)->count());
+        $this->assertNoRemainingLockErrors($parsed);
         $row = PostReport::query()->where('reporter_id', $reporter->id)->first();
         $this->assertNotNull($row);
         $this->assertContains($row->reason_code, ['spam', 'inappropriate']);
@@ -149,6 +136,7 @@ class PostReportIdempotencyMysqlConcurrencyTest extends TestCase
         $parsed = $this->runBarrierPair($envA, $envB);
 
         $this->assertNoUnclassifiedServerError($parsed);
+        $this->assertNoRemainingLockErrors($parsed);
         $okIds = $this->okIds($parsed);
         $this->assertCount(2, $okIds, $this->combined($parsed));
         $this->assertNotSame($okIds[0], $okIds[1]);
@@ -168,6 +156,7 @@ class PostReportIdempotencyMysqlConcurrencyTest extends TestCase
         $parsed = $this->runBarrierPair($envA, $envB);
 
         $this->assertNoUnclassifiedServerError($parsed);
+        $this->assertNoRemainingLockErrors($parsed);
         $okIds = $this->okIds($parsed);
         $this->assertCount(2, $okIds, $this->combined($parsed));
         $this->assertNotSame($okIds[0], $okIds[1]);
@@ -198,6 +187,7 @@ class PostReportIdempotencyMysqlConcurrencyTest extends TestCase
         $parsed = $this->runBarrierPair($env, $env);
 
         $this->assertNoUnclassifiedServerError($parsed);
+        $this->assertNoRemainingLockErrors($parsed);
         $okIds = $this->okIds($parsed);
         $this->assertCount(2, $okIds, $this->combined($parsed));
         $this->assertSame($created->id, $okIds[0]);
@@ -235,17 +225,10 @@ class PostReportIdempotencyMysqlConcurrencyTest extends TestCase
         }
 
         $this->assertStringNotContainsString('ERR:500', $combined, $combined);
-        $lockErrors = $this->lockErrors($parsed);
-        if ($lockErrors === []) {
-            $this->assertCount(2, $this->okIds($parsed), '1213/1205 no observados en esta ejecución; ambos workers OK. '.$combined);
-
-            return;
-        }
-
-        $this->markTestIncomplete(
-            'Escenario F: integridad OK (1 fila, 1213/1205 no tratados como replay) pero disponibilidad concurrente no validada por lock '
-            .implode(',', $lockErrors).'. '.$combined
-        );
+        $this->assertNoRemainingLockErrors($parsed);
+        $okIds = $this->okIds($parsed);
+        $this->assertCount(2, $okIds, 'Disponibilidad: los reintentos internos deben absorber 1213/1205. '.$combined);
+        $this->assertSame($okIds[0], $okIds[1]);
     }
 
     /**
@@ -406,6 +389,18 @@ class PostReportIdempotencyMysqlConcurrencyTest extends TestCase
     {
         $this->assertStringNotContainsString('ERR:500', $this->combined($parsed), $this->combined($parsed));
         $this->assertStringNotContainsString('ERR:2:', $this->combined($parsed), $this->combined($parsed));
+    }
+
+    /**
+     * @param  array<string, array{ok: ?int, err: ?int, raw: string}>  $parsed
+     */
+    private function assertNoRemainingLockErrors(array $parsed): void
+    {
+        $this->assertSame(
+            [],
+            $this->lockErrors($parsed),
+            'Disponibilidad fallida: 1213/1205 tras reintentos internos. '.$this->combined($parsed)
+        );
     }
 
     private function finalizeWorkerPool(ProcessPoolResults $results): void

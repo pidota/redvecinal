@@ -3,8 +3,10 @@
 namespace App\Domains\Posts\Support;
 
 use App\Domains\Posts\Exceptions\PostReportIdempotencyException;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Throwable;
 
 /**
  * Contrato de Idempotency-Key para POST /api/v1/posts/{post}/reports.
@@ -13,6 +15,12 @@ use Illuminate\Http\Request;
 final class PostReportIdempotency
 {
     public const HEADER = 'Idempotency-Key';
+
+    /**
+     * Intentos de la transacción idempotente ante deadlock 1213 o lock wait 1205.
+     * No aplica a 409, 422, FK ni UNIQUE de otro índice.
+     */
+    public const TRANSIENT_ATTEMPTS = 3;
 
     /**
      * UUID v4 (RFC 4122): 8-4-4-4-12 hex, versión 4, variante 8/9/a/b.
@@ -112,5 +120,36 @@ final class PostReportIdempotency
 
         return str_contains($message, 'UNIQUE constraint failed')
             && str_contains($message, 'idempotency_key');
+    }
+
+    /**
+     * Condición transitoria de locking InnoDB. No incluye 1062/23000 ni 409.
+     * Incluye DeadlockException de Laravel (envoltorio de 1213 en transacción anidada).
+     */
+    public static function isTransientLockError(Throwable $exception): bool
+    {
+        if ($exception instanceof DeadlockException) {
+            return true;
+        }
+
+        if (! $exception instanceof QueryException) {
+            return false;
+        }
+
+        $driverCode = $exception->errorInfo[1] ?? null;
+        if (in_array($driverCode, [1205, 1213], true)) {
+            return true;
+        }
+
+        $sqlState = (string) ($exception->errorInfo[0] ?? '');
+        if ($sqlState !== '40001') {
+            return false;
+        }
+
+        $message = $exception->getMessage();
+
+        return str_contains($message, '1213')
+            || str_contains($message, 'Deadlock')
+            || str_contains($message, '1205');
     }
 }

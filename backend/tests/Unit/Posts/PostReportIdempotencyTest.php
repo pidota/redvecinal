@@ -4,6 +4,7 @@ namespace Tests\Unit\Posts;
 
 use App\Domains\Posts\Exceptions\PostReportIdempotencyException;
 use App\Domains\Posts\Support\PostReportIdempotency;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Database\QueryException;
 use PDOException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -193,6 +194,53 @@ class PostReportIdempotencyTest extends TestCase
         $this->assertFalse(PostReportIdempotency::isReporterKeyUniqueViolation($foreignKey));
         $this->assertFalse(PostReportIdempotency::isReporterKeyUniqueViolation($otherUnique));
         $this->assertFalse(PostReportIdempotency::isReporterKeyUniqueViolation($deadlock));
+    }
+
+    public function test_mysql_deadlock_is_transient_lock(): void
+    {
+        $exception = $this->queryException('40001', 1213, 'SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction');
+
+        $this->assertTrue(PostReportIdempotency::isTransientLockError($exception));
+        $this->assertFalse(PostReportIdempotency::isReporterKeyUniqueViolation($exception));
+        $this->assertTrue(PostReportIdempotency::isTransientLockError(
+            new DeadlockException('Deadlock found when trying to get lock', 0, $exception)
+        ));
+    }
+
+    public function test_mysql_lock_wait_timeout_is_transient_lock(): void
+    {
+        $exception = $this->queryException(
+            'HY000',
+            1205,
+            'SQLSTATE[HY000]: General error: 1205 Lock wait timeout exceeded; try restarting transaction',
+        );
+
+        $this->assertTrue(PostReportIdempotency::isTransientLockError($exception));
+        $this->assertFalse(PostReportIdempotency::isReporterKeyUniqueViolation($exception));
+    }
+
+    public function test_sqlstate_40001_without_deadlock_evidence_is_not_transient(): void
+    {
+        $exception = $this->queryException('40001', 0, 'SQLSTATE[40001]: Serialization failure');
+
+        $this->assertFalse(PostReportIdempotency::isTransientLockError($exception));
+    }
+
+    public function test_unique_and_fk_are_not_transient_locks(): void
+    {
+        $unique = $this->queryException(
+            '23000',
+            1062,
+            "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-k' for key 'post_reports_reporter_idempotency_unique'",
+        );
+        $fk = $this->queryException(
+            '23000',
+            1452,
+            'SQLSTATE[23000]: Integrity constraint violation: 1452 Cannot add or update a child row',
+        );
+
+        $this->assertFalse(PostReportIdempotency::isTransientLockError($unique));
+        $this->assertFalse(PostReportIdempotency::isTransientLockError($fk));
     }
 
     private function queryException(string $sqlState, int $driverCode, string $message): QueryException

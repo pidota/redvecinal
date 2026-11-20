@@ -12,6 +12,7 @@ use App\Domains\Posts\Support\PostReportIdempotency;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use PDOException;
 use Tests\Concerns\CreatesPostFixtures;
 use Tests\TestCase;
@@ -47,7 +48,7 @@ class PostReportIdempotencyRaceTest extends TestCase
         {
             private bool $skipFirstLookup = true;
 
-            protected function findKeyedReportForUpdate(int $reporterId, string $idempotencyKey): ?PostReport
+            protected function findKeyedReport(int $reporterId, string $idempotencyKey): ?PostReport
             {
                 if ($this->skipFirstLookup) {
                     $this->skipFirstLookup = false;
@@ -55,7 +56,7 @@ class PostReportIdempotencyRaceTest extends TestCase
                     return null;
                 }
 
-                return parent::findKeyedReportForUpdate($reporterId, $idempotencyKey);
+                return parent::findKeyedReport($reporterId, $idempotencyKey);
             }
         };
 
@@ -84,7 +85,7 @@ class PostReportIdempotencyRaceTest extends TestCase
         {
             private bool $skipFirstLookup = true;
 
-            protected function findKeyedReportForUpdate(int $reporterId, string $idempotencyKey): ?PostReport
+            protected function findKeyedReport(int $reporterId, string $idempotencyKey): ?PostReport
             {
                 if ($this->skipFirstLookup) {
                     $this->skipFirstLookup = false;
@@ -92,7 +93,7 @@ class PostReportIdempotencyRaceTest extends TestCase
                     return null;
                 }
 
-                return parent::findKeyedReportForUpdate($reporterId, $idempotencyKey);
+                return parent::findKeyedReport($reporterId, $idempotencyKey);
             }
         };
 
@@ -144,6 +145,139 @@ class PostReportIdempotencyRaceTest extends TestCase
             $this->assertSame(1452, $exception->errorInfo[1] ?? null);
         }
 
+        $this->assertSame($before, PostReport::query()->count());
+    }
+
+    public function test_other_unique_index_is_not_treated_as_idempotency(): void
+    {
+        [, $author, , $post] = $this->publishedCommunityPost();
+        $before = PostReport::query()->count();
+
+        $service = new class extends ReportPostService
+        {
+            protected function insertOpenReport(
+                User $reporter,
+                string $reasonCode,
+                ?Post $post,
+                ?PostComment $comment,
+                ?string $details,
+                ?string $idempotencyKey,
+                ?string $fingerprint,
+            ): PostReport {
+                $previous = new PDOException(
+                    "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1' for key 'users_email_unique'",
+                    1062,
+                );
+                $previous->errorInfo = [
+                    '23000',
+                    1062,
+                    "Duplicate entry '1' for key 'users_email_unique'",
+                ];
+
+                throw new QueryException('mysql', 'insert into post_reports', [], $previous);
+            }
+        };
+
+        try {
+            $service->execute($author, 'spam', $post, null, 'Uno', self::KEY);
+            $this->fail('Debe relanzar el UNIQUE ajeno.');
+        } catch (QueryException $exception) {
+            $this->assertSame(1062, $exception->errorInfo[1] ?? null);
+            $this->assertFalse(PostReportIdempotency::isReporterKeyUniqueViolation($exception));
+        }
+
+        $this->assertSame($before, PostReport::query()->count());
+    }
+
+    public function test_unique_recovery_runs_outside_the_aborted_transaction(): void
+    {
+        [, $author, , $post] = $this->publishedCommunityPost();
+        $fingerprint = PostReportIdempotency::fingerprint($post->id, 'spam', 'Uno');
+        $existing = PostReport::query()->create([
+            'post_id' => $post->id,
+            'municipality_id' => $post->municipality_id,
+            'reporter_id' => $author->id,
+            'reason_code' => 'spam',
+            'details' => 'Uno',
+            'status' => PostReportStatus::Open,
+            'idempotency_key' => self::KEY,
+            'payload_fingerprint' => $fingerprint,
+        ]);
+
+        $service = new class extends ReportPostService
+        {
+            public int $recoveryTransactionLevel = -1;
+
+            private bool $skipFirstLookup = true;
+
+            protected function findKeyedReport(int $reporterId, string $idempotencyKey): ?PostReport
+            {
+                if ($this->skipFirstLookup) {
+                    $this->skipFirstLookup = false;
+
+                    return null;
+                }
+
+                return parent::findKeyedReport($reporterId, $idempotencyKey);
+            }
+
+            protected function recoverExistingKeyedReport(int $reporterId, string $idempotencyKey): ?PostReport
+            {
+                $this->recoveryTransactionLevel = DB::transactionLevel();
+
+                return parent::recoverExistingKeyedReport($reporterId, $idempotencyKey);
+            }
+        };
+
+        $levelBefore = DB::transactionLevel();
+        $result = $service->execute($author, 'spam', $post, null, 'Uno', self::KEY);
+
+        $this->assertSame($levelBefore, $service->recoveryTransactionLevel);
+        $this->assertSame($existing->id, $result->id);
+        $this->assertSame(1, PostReport::query()->where('idempotency_key', self::KEY)->count());
+    }
+
+    public function test_unique_without_visible_winner_does_not_insert_again(): void
+    {
+        [, $author, , $post] = $this->publishedCommunityPost();
+        $before = PostReport::query()->count();
+
+        $service = new class extends ReportPostService
+        {
+            public int $inserts = 0;
+
+            protected function insertOpenReport(
+                User $reporter,
+                string $reasonCode,
+                ?Post $post,
+                ?PostComment $comment,
+                ?string $details,
+                ?string $idempotencyKey,
+                ?string $fingerprint,
+            ): PostReport {
+                $this->inserts++;
+                $previous = new PDOException(
+                    "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-key' for key 'post_reports_reporter_idempotency_unique'",
+                    1062,
+                );
+                $previous->errorInfo = [
+                    '23000',
+                    1062,
+                    "Duplicate entry '1-key' for key 'post_reports_reporter_idempotency_unique'",
+                ];
+
+                throw new QueryException('mysql', 'insert into post_reports', [], $previous);
+            }
+        };
+
+        try {
+            $service->execute($author, 'spam', $post, null, 'Uno', self::KEY);
+            $this->fail('Sin fila ganadora no debe inventar éxito.');
+        } catch (QueryException $exception) {
+            $this->assertTrue(PostReportIdempotency::isReporterKeyUniqueViolation($exception));
+        }
+
+        $this->assertSame(1, $service->inserts);
         $this->assertSame($before, PostReport::query()->count());
     }
 }

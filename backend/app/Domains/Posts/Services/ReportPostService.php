@@ -11,6 +11,7 @@ use App\Domains\Posts\Support\PostReportIdempotency;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class ReportPostService
 {
@@ -35,14 +36,56 @@ class ReportPostService
         }
 
         $fingerprint = PostReportIdempotency::fingerprint($post?->id, $reasonCode, $details);
+        $attempts = $this->transientAttemptLimit();
+        $lastTransient = null;
 
-        return DB::transaction(function () use ($reporter, $reasonCode, $post, $comment, $details, $idempotencyKey, $fingerprint) {
-            $existing = $this->findKeyedReportForUpdate($reporter->id, $idempotencyKey);
-            if ($existing !== null) {
-                return $this->sameAttemptOrConflict($existing, $post?->id, $fingerprint);
-            }
-
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
             try {
+                return $this->executeKeyedAttempt(
+                    $reporter,
+                    $reasonCode,
+                    $post,
+                    $comment,
+                    $details,
+                    $idempotencyKey,
+                    $fingerprint,
+                );
+            } catch (PostReportIdempotencyException $exception) {
+                throw $exception;
+            } catch (Throwable $exception) {
+                if (! PostReportIdempotency::isTransientLockError($exception)) {
+                    throw $exception;
+                }
+
+                $lastTransient = $exception;
+
+                if ($attempt >= $attempts) {
+                    throw $exception;
+                }
+
+                $this->pauseBeforeTransientRetry($attempt);
+            }
+        }
+
+        throw $lastTransient;
+    }
+
+    protected function executeKeyedAttempt(
+        User $reporter,
+        string $reasonCode,
+        ?Post $post,
+        ?PostComment $comment,
+        ?string $details,
+        string $idempotencyKey,
+        string $fingerprint,
+    ): PostReport {
+        try {
+            return DB::transaction(function () use ($reporter, $reasonCode, $post, $comment, $details, $idempotencyKey, $fingerprint) {
+                $existing = $this->findKeyedReport($reporter->id, $idempotencyKey);
+                if ($existing !== null) {
+                    return $this->sameAttemptOrConflict($existing, $post?->id, $fingerprint);
+                }
+
                 return $this->insertOpenReport(
                     $reporter,
                     $reasonCode,
@@ -52,28 +95,38 @@ class ReportPostService
                     $idempotencyKey,
                     $fingerprint,
                 );
-            } catch (QueryException $exception) {
-                if (! PostReportIdempotency::isReporterKeyUniqueViolation($exception)) {
-                    throw $exception;
-                }
-
-                $existing = $this->findKeyedReportForUpdate($reporter->id, $idempotencyKey);
-                if ($existing === null) {
-                    throw $exception;
-                }
-
-                return $this->sameAttemptOrConflict($existing, $post?->id, $fingerprint);
+            });
+        } catch (QueryException $exception) {
+            if (! PostReportIdempotency::isReporterKeyUniqueViolation($exception)) {
+                throw $exception;
             }
-        });
+
+            $existing = $this->recoverExistingKeyedReport($reporter->id, $idempotencyKey);
+            if ($existing === null) {
+                throw $exception;
+            }
+
+            return $this->sameAttemptOrConflict($existing, $post?->id, $fingerprint);
+        }
     }
 
-    protected function findKeyedReportForUpdate(int $reporterId, string $idempotencyKey): ?PostReport
+    /**
+     * Lectura ordinaria: no toma gap/next-key lock sobre una clave ausente.
+     */
+    protected function findKeyedReport(int $reporterId, string $idempotencyKey): ?PostReport
     {
         return PostReport::query()
             ->where('reporter_id', $reporterId)
             ->where('idempotency_key', $idempotencyKey)
-            ->lockForUpdate()
             ->first();
+    }
+
+    /**
+     * Recuperación tras UNIQUE 1062, fuera de la transacción abortada (REPEATABLE READ).
+     */
+    protected function recoverExistingKeyedReport(int $reporterId, string $idempotencyKey): ?PostReport
+    {
+        return $this->findKeyedReport($reporterId, $idempotencyKey);
     }
 
     protected function insertOpenReport(
@@ -112,5 +165,15 @@ class ReportPostService
         }
 
         return $existing;
+    }
+
+    protected function transientAttemptLimit(): int
+    {
+        return PostReportIdempotency::TRANSIENT_ATTEMPTS;
+    }
+
+    protected function pauseBeforeTransientRetry(int $attempt): void
+    {
+        usleep(random_int(10_000, 40_000) * $attempt);
     }
 }

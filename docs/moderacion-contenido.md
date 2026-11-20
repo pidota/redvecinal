@@ -152,11 +152,12 @@ Identidad lógica: `(reporter_id, idempotency_key)`. La publicación y el conten
 
 #### Algoritmo
 
-1. Sin clave: `INSERT` legacy (sin transacción extra).
-2. Con clave: transacción, `SELECT … FOR UPDATE` por usuario y clave.
-3. Si existe: comparar `post_id` y `payload_fingerprint`; igual → devolver fila; distinto → **409**.
-4. Si no existe: `INSERT` con clave y huella. Si el único `(reporter_id, idempotency_key)` salta, **solo** ese índice se trata como carrera: se relée la fila y se aplica el paso 3. Otros `23000` (FK, otros únicos), deadlocks `1213` y lock wait `1205` se relanzan; no hay reintentos genéricos.
-5. Si tras el único no aparece fila, se relanza el error SQL **sin** insertar otra vez.
+1. Sin clave: `INSERT` legacy (sin transacción extra ni reintentos).
+2. Con clave: hasta **3** intentos de transacción completa. Reintento **solo** ante deadlock MySQL `1213`, lock wait `1205` o `SQLSTATE 40001` con evidencia inequívoca de deadlock. No se reintenta 409, 422, 401/403/404, FK `1452`, UNIQUE de otro índice ni errores desconocidos. Agotar intentos relanza el error; **nunca** se finge un 201.
+3. En cada intento: `SELECT` ordinario (sin `FOR UPDATE`) por `(reporter_id autenticado, clave)`. Si existe: comparar `post_id` y `payload_fingerprint`; igual → devolver fila; distinto → **409**. Sin mutación ni eventos.
+4. Si no existe: `INSERT` con clave y huella. El UNIQUE `(reporter_id, idempotency_key)` impide duplicados.
+5. Colisión **solo** de `post_reports_reporter_idempotency_unique`: rollback de esa transacción y lectura de la fila ganadora **fuera** de ella (visibilidad REPEATABLE READ). Replay o 409. Si la ganadora no es visible, se relanza el SQL **sin** segundo INSERT y **sin** inventar éxito.
+6. No hay lock global por usuario. UUID distintas no se serializan a propósito.
 
 #### Huella canónica
 
@@ -171,7 +172,7 @@ Identidad lógica: `(reporter_id, idempotency_key)`. La publicación y el conten
 
 #### Concurrencia
 
-La garantía final es el único de base de datos, no un SELECT previo. Hay tests SQLite del camino de colisión (lookup omitido a propósito). La carrera InnoDB a dos procesos (`PostReportIdempotencyMysqlConcurrencyTest` + worker + barrera de archivos) se omite en `php artisan test` (SQLite) y **no** forma parte de `phpunit.mysql.xml`. Se ejecuta solo con `phpunit.mysql.idempotency.xml` en el workflow `mysql-idempotency.yml` (`workflow_dispatch`), contra MySQL 8.4 efímero (`red_vecinal_testing`, `127.0.0.1`). **Todavía no hay resultados reales de GitHub Actions.** No ejecutar contra MariaDB de Laragon ni contra el VPS.
+La exclusión la da el UNIQUE, no un `SELECT … FOR UPDATE` sobre una clave ausente (ese patrón produjo deadlock 1213 en MySQL 8.4.13, run `44636447594`: A/E PASS; B/C/D FAIL; F incomplete). Hay tests SQLite de colisión UNIQUE, reintento 1213/1205, agotamiento y recuperación fuera de transacción. La carrera InnoDB a dos procesos (`PostReportIdempotencyMysqlConcurrencyTest` + worker + barrera) se omite en `php artisan test` (SQLite) y **no** forma parte de `phpunit.mysql.xml`. Se ejecuta con `phpunit.mysql.idempotency.xml` en `mysql-idempotency.yml` (`workflow_dispatch`), contra MySQL 8.4 efímero (`red_vecinal_testing`, `127.0.0.1`). **La corrección 5E.5E.2 no se ha vuelto a ejecutar en GitHub Actions; no se afirma que 8.4 pasó.** No ejecutar contra MariaDB de Laragon ni contra el VPS.
 
 #### Cliente Flutter (5E.4)
 
@@ -181,4 +182,4 @@ Migración desde `rv_post_report_outcomes_v1`: `confirmed` sigue bloqueando; `un
 
 Un 201 se confirma en disco **con** payload; solo después se borra `reason_code`/`details`/UUID (se puede conservar `reportId`). Si esa escritura falla, el intento sigue `uncertain` y recuperable. Un 409 deja el intento en `conflict`. Timeout, red, 5xx, 429, 422 genérico o 201 malformado conservan clave y payload. Un 422 de `reason_code`/`details` o de clave inválida reconocible **sí** libera el vuelo (el servidor no insertó). En **web** el almacén sigue en memoria: la recuperación vale hasta recargar.
 
-La concurrencia real con dos conexiones MySQL 8.4 **sigue sin ejecutarse en CI** hasta autorizar commit/push y un `workflow_dispatch` de `.github/workflows/mysql-idempotency.yml`.
+Un nuevo `workflow_dispatch` de `.github/workflows/mysql-idempotency.yml` es necesario para validar la corrección transaccional en MySQL 8.4; hasta entonces la concurrencia real **no** se considera aprobada.
