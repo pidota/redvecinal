@@ -7,6 +7,7 @@ import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/session_retry_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
+import '../../features/chat/application/chat_route_observer.dart';
 import '../../features/chat/presentation/chat_conversation_invalid_route_screen.dart';
 import '../../features/chat/presentation/chat_conversation_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
@@ -66,11 +67,13 @@ String? _authRedirect(GoRouterState state, AuthState auth) {
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final refresh = ref.watch(routerRefreshListenableProvider);
+  final chatObserver = ref.read(chatRouteObserverProvider);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: refresh,
+    observers: [chatObserver],
     redirect: (context, state) {
       final auth = ref.read(authControllerProvider);
       return _authRedirect(state, auth);

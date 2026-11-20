@@ -103,6 +103,7 @@ class FakeChatGateway implements ChatGateway {
     this.sendResult,
     this.sendFailure,
     this.unread = const ChatUnreadCount(unreadCount: 0),
+    this.unreadByRoom = const {},
     this.readResult = const ChatReadResult(),
     this.messageById = const {},
     this.sendDelay = Duration.zero,
@@ -111,6 +112,12 @@ class FakeChatGateway implements ChatGateway {
     this.listFailure,
     this.roomsFailure,
     this.roomsDelay = Duration.zero,
+    this.unreadDelay = Duration.zero,
+    this.markReadDelay = Duration.zero,
+    this.unreadFailure,
+    this.unreadFailureByRoom = const {},
+    this.markReadFailure,
+    this.zeroUnreadAfterRead = true,
   });
 
   List<ChatRoom> rooms;
@@ -118,6 +125,7 @@ class FakeChatGateway implements ChatGateway {
   ChatSendResult? sendResult;
   Object? sendFailure;
   ChatUnreadCount unread;
+  Map<int, ChatUnreadCount> unreadByRoom;
   ChatReadResult readResult;
   Map<int, ChatMessage> messageById;
   int sendCalls = 0;
@@ -129,6 +137,18 @@ class FakeChatGateway implements ChatGateway {
   Object? roomsFailure;
   Duration roomsDelay = Duration.zero;
   int listCalls = 0;
+  Duration unreadDelay = Duration.zero;
+  Duration markReadDelay = Duration.zero;
+  Object? unreadFailure;
+  Map<int, Object?> unreadFailureByRoom;
+  Object? markReadFailure;
+  bool zeroUnreadAfterRead;
+  int unreadCalls = 0;
+  int markReadCalls = 0;
+  int markReadInFlight = 0;
+  int markReadMaxInFlight = 0;
+  final List<int> unreadRequestedRooms = [];
+  final List<Map<String, dynamic>> markReadPayloads = [];
 
   @override
   Future<List<ChatRoom>> listRooms({CancelToken? cancelToken}) async {
@@ -218,12 +238,53 @@ class FakeChatGateway implements ChatGateway {
     int? lastReadMessageId,
     CancelToken? cancelToken,
   }) async {
-    return readResult;
+    markReadCalls++;
+    markReadInFlight++;
+    if (markReadInFlight > markReadMaxInFlight) {
+      markReadMaxInFlight = markReadInFlight;
+    }
+    markReadPayloads.add({
+      'roomId': roomId,
+      'last_read_message_id': lastReadMessageId,
+    });
+    try {
+      if (markReadDelay > Duration.zero) {
+        await Future<void>.delayed(markReadDelay);
+      }
+      if (markReadFailure != null) {
+        throw markReadFailure!;
+      }
+      if (zeroUnreadAfterRead) {
+        unread = const ChatUnreadCount(unreadCount: 0);
+        unreadByRoom = {
+          ...unreadByRoom,
+          roomId: const ChatUnreadCount(unreadCount: 0),
+        };
+      }
+      if (readResult.lastReadMessageId != null || lastReadMessageId == null) {
+        return readResult;
+      }
+      return ChatReadResult(
+        lastReadMessageId: lastReadMessageId,
+        lastReadAt: DateTime.parse('2026-11-20T21:00:00.000000Z'),
+      );
+    } finally {
+      markReadInFlight--;
+    }
   }
 
   @override
   Future<ChatUnreadCount> unreadCount(int roomId, {CancelToken? cancelToken}) async {
-    return unread;
+    unreadCalls++;
+    unreadRequestedRooms.add(roomId);
+    if (unreadDelay > Duration.zero) {
+      await Future<void>.delayed(unreadDelay);
+    }
+    final failure = unreadFailureByRoom[roomId] ?? unreadFailure;
+    if (failure != null) {
+      throw failure;
+    }
+    return unreadByRoom[roomId] ?? unread;
   }
 
   @override

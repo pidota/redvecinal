@@ -12,15 +12,19 @@ class ChatUnreadState {
     this.unreadCount = 0,
     this.lastRead,
     this.accessRevoked = false,
+    this.loadFailed = false,
   });
 
   final int unreadCount;
   final ChatReadResult? lastRead;
   final bool accessRevoked;
+  final bool loadFailed;
 }
 
 class ChatUnreadController
     extends AutoDisposeFamilyAsyncNotifier<ChatUnreadState, int> {
+  int _generation = 0;
+
   @override
   Future<ChatUnreadState> build(int roomId) {
     ref.watch(authControllerProvider);
@@ -35,50 +39,64 @@ class ChatUnreadController
     return _load(roomId, epoch);
   }
 
-  Future<void> markRead({int? lastReadMessageId}) async {
+  Future<void> refresh() async {
     final epoch = neighborhoodSessionEpoch(ref);
     if (epoch == null) {
+      state = const AsyncValue.data(ChatUnreadState());
       return;
     }
-    try {
-      final result = await ref.read(chatRepositoryProvider).markRead(
-            roomId: arg,
-            lastReadMessageId: lastReadMessageId,
-          );
-      if (neighborhoodSessionEpoch(ref) != epoch) {
-        return;
-      }
-      final unread = await ref.read(chatRepositoryProvider).unreadCount(arg);
-      if (neighborhoodSessionEpoch(ref) != epoch) {
-        return;
-      }
+    if (ref.read(chatRevokedRoomIdsProvider).contains(arg)) {
+      state = const AsyncValue.data(ChatUnreadState(accessRevoked: true));
+      return;
+    }
+    state = await AsyncValue.guard(() => _load(arg, epoch));
+    final current = state.valueOrNull;
+    if (current != null && current.unreadCount < 0) {
       state = AsyncValue.data(
         ChatUnreadState(
-          unreadCount: unread.unreadCount,
-          lastRead: result,
+          lastRead: current.lastRead,
+          accessRevoked: current.accessRevoked,
+          loadFailed: current.loadFailed,
         ),
       );
-    } on ApiForbiddenFailure {
-      revokeChatRoomAccess(ref, arg);
-      state = const AsyncValue.data(ChatUnreadState(accessRevoked: true));
-    } on ApiSessionExpiredFailure {
-      state = const AsyncValue.data(ChatUnreadState());
     }
   }
 
   Future<ChatUnreadState> _load(int roomId, int epoch) async {
+    final generation = ++_generation;
     try {
       final unread = await ref.read(chatRepositoryProvider).unreadCount(roomId);
-      if (neighborhoodSessionEpoch(ref) != epoch) {
-        return const ChatUnreadState();
+      if (!_stillCurrent(epoch, generation)) {
+        return state.valueOrNull ?? const ChatUnreadState();
       }
-      return ChatUnreadState(unreadCount: unread.unreadCount);
+      return ChatUnreadState(
+        unreadCount: unread.unreadCount < 0 ? 0 : unread.unreadCount,
+      );
     } on ApiForbiddenFailure {
+      if (!_stillCurrent(epoch, generation)) {
+        return state.valueOrNull ?? const ChatUnreadState();
+      }
       revokeChatRoomAccess(ref, roomId);
       return const ChatUnreadState(accessRevoked: true);
     } on ApiSessionExpiredFailure {
+      if (!_stillCurrent(epoch, generation)) {
+        return state.valueOrNull ?? const ChatUnreadState();
+      }
       return const ChatUnreadState();
+    } on ApiFailure {
+      if (!_stillCurrent(epoch, generation)) {
+        return state.valueOrNull ?? const ChatUnreadState();
+      }
+      return ChatUnreadState(
+        unreadCount: state.valueOrNull?.unreadCount ?? 0,
+        lastRead: state.valueOrNull?.lastRead,
+        loadFailed: true,
+      );
     }
+  }
+
+  bool _stillCurrent(int epoch, int generation) {
+    return neighborhoodSessionEpoch(ref) == epoch && generation == _generation;
   }
 }
 

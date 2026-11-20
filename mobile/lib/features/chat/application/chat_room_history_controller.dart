@@ -7,6 +7,7 @@ import '../data/chat_repository.dart';
 import '../data/chat_timeline.dart';
 import '../data/models/chat_message.dart';
 import 'chat_access.dart';
+import 'chat_trusted_window.dart';
 
 class ChatRoomHistoryState {
   const ChatRoomHistoryState({
@@ -17,6 +18,7 @@ class ChatRoomHistoryState {
     this.hasOlder = false,
     this.isLoadingOlder = false,
     this.isRefreshingNewer = false,
+    this.trustedMaxId,
   });
 
   final int roomId;
@@ -33,6 +35,9 @@ class ChatRoomHistoryState {
   final bool isLoadingOlder;
   final bool isRefreshingNewer;
 
+  /// Límite superior acreditado por páginas REST conectadas. No es timeline.maxId.
+  final int? trustedMaxId;
+
   ChatRoomHistoryState copyWith({
     ChatTimeline? timeline,
     bool? accessRevoked,
@@ -40,6 +45,7 @@ class ChatRoomHistoryState {
     bool? hasOlder,
     bool? isLoadingOlder,
     bool? isRefreshingNewer,
+    int? trustedMaxId,
   }) {
     return ChatRoomHistoryState(
       roomId: roomId,
@@ -49,6 +55,7 @@ class ChatRoomHistoryState {
       hasOlder: hasOlder ?? this.hasOlder,
       isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
       isRefreshingNewer: isRefreshingNewer ?? this.isRefreshingNewer,
+      trustedMaxId: trustedMaxId ?? this.trustedMaxId,
     );
   }
 }
@@ -59,6 +66,7 @@ class ChatRoomHistoryController
 
   @override
   Future<ChatRoomHistoryState> build(int roomId) {
+    _generation++;
     ref.watch(authControllerProvider);
     final epoch = neighborhoodSessionEpoch(ref);
     if (epoch == null) {
@@ -92,7 +100,11 @@ class ChatRoomHistoryController
     final generation = ++_generation;
     state = AsyncValue.data(current.copyWith(isRefreshingNewer: true));
     try {
-      final afterId = current.timeline.maxId;
+      final afterId = current.trustedMaxId;
+      if (afterId == null) {
+        state = AsyncValue.data(current.copyWith(isRefreshingNewer: false));
+        return;
+      }
       final page = await ref.read(chatRepositoryProvider).listMessages(
             roomId: arg,
             afterId: afterId,
@@ -100,19 +112,34 @@ class ChatRoomHistoryController
       if (neighborhoodSessionEpoch(ref) != epoch || generation != _generation) {
         return;
       }
+      final latest = state.valueOrNull ?? current;
+      if (latest.accessRevoked) {
+        return;
+      }
+      final merged = latest.timeline.merge(page.messages, roomId: arg);
+      final trusted = advanceTrustedMaxId(
+        currentTrustedMaxId: latest.trustedMaxId ?? current.trustedMaxId,
+        requestedAfterId: afterId,
+        pageMessages: page.messages,
+        roomId: arg,
+      );
       state = AsyncValue.data(
-        current.copyWith(
-          timeline: current.timeline.merge(page.messages, roomId: arg),
+        latest.copyWith(
+          timeline: merged,
           caughtUpNewer: !page.mayHaveMore,
           isRefreshingNewer: false,
+          trustedMaxId: trusted,
         ),
       );
     } on ApiForbiddenFailure {
-      if (neighborhoodSessionEpoch(ref) != epoch) {
+      if (neighborhoodSessionEpoch(ref) != epoch || generation != _generation) {
         return;
       }
       markAccessRevoked();
     } on ApiSessionExpiredFailure {
+      if (generation != _generation) {
+        return;
+      }
       state = AsyncValue.data(ChatRoomHistoryState(roomId: arg));
     } on ApiFailure {
       final latest = state.valueOrNull ?? current;
@@ -191,11 +218,13 @@ class ChatRoomHistoryController
       if (neighborhoodSessionEpoch(ref) != epoch) {
         return ChatRoomHistoryState(roomId: roomId);
       }
+      final timeline = const ChatTimeline().merge(page.messages, roomId: roomId);
       return ChatRoomHistoryState(
         roomId: roomId,
-        timeline: const ChatTimeline().merge(page.messages, roomId: roomId),
+        timeline: timeline,
         caughtUpNewer: true,
         hasOlder: page.mayHaveMore,
+        trustedMaxId: timeline.maxId,
       );
     } on ApiForbiddenFailure {
       revokeChatRoomAccess(ref, roomId);

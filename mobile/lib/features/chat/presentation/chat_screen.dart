@@ -9,6 +9,7 @@ import '../../../shared/widgets/rv_empty_state.dart';
 import '../../../shared/widgets/rv_loading_indicator.dart';
 import '../../../shared/widgets/rv_primary_button.dart';
 import '../application/chat_rooms_controller.dart';
+import '../application/chat_unread_controller.dart';
 import '../data/models/chat_room.dart';
 import 'widgets/chat_room_tile.dart';
 
@@ -21,7 +22,7 @@ class ChatScreen extends ConsumerWidget {
 
     return FeatureShellScaffold(
       title: 'Chat',
-      phaseLabel: 'Fase 5.5.4',
+      phaseLabel: 'Fase 5.5.5',
       body: roomsAsync.when(
         loading: () => const RvLoadingIndicator(message: 'Cargando salas'),
         error: (error, _) => RvEmptyState(
@@ -47,8 +48,7 @@ class ChatScreen extends ConsumerWidget {
             );
           }
           return RefreshIndicator(
-            onRefresh: () =>
-                ref.read(chatRoomsControllerProvider.notifier).refresh(),
+            onRefresh: () => _refreshRooms(ref, rooms),
             child: ListView.separated(
               padding: const EdgeInsets.all(RvSpacing.md),
               itemCount: rooms.length,
@@ -65,6 +65,17 @@ class ChatScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  Future<void> _refreshRooms(WidgetRef ref, List<ChatRoom> rooms) async {
+    for (final room in rooms) {
+      ref.invalidate(chatUnreadControllerProvider(room.id));
+    }
+    await ref.read(chatRoomsControllerProvider.notifier).refresh();
+    final next = ref.read(chatRoomsControllerProvider).valueOrNull ?? rooms;
+    for (final room in next) {
+      ref.invalidate(chatUnreadControllerProvider(room.id));
+    }
   }
 
   void _openRoom(BuildContext context, ChatRoom room) {

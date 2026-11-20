@@ -43,6 +43,16 @@ String formatChatTimestamp(DateTime? value) {
   return '$day/$month $hour:$minute';
 }
 
+String compactUnreadCountLabel(int count) {
+  if (count <= 0) {
+    return '';
+  }
+  if (count > 99) {
+    return '99+';
+  }
+  return '$count';
+}
+
 String chatOutgoingStatusLabel(ChatOutgoingStatus status) {
   switch (status) {
     case ChatOutgoingStatus.sending:

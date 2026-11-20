@@ -11,15 +11,19 @@ import '../../auth/application/auth_controller.dart';
 import '../../auth/domain/auth_state.dart';
 import '../application/chat_access.dart';
 import '../application/chat_outgoing.dart';
+import '../application/chat_read_coordinator.dart';
 import '../application/chat_room_history_controller.dart';
 import '../application/chat_rooms_controller.dart';
+import '../application/chat_route_observer.dart';
 import '../application/chat_send_coordinator.dart';
 import '../data/models/chat_enums.dart';
+import '../data/models/chat_message.dart';
 import '../data/models/chat_room.dart';
 import 'chat_labels.dart';
 import 'chat_thread.dart';
 import 'widgets/chat_composer.dart';
 import 'widgets/chat_message_bubble.dart';
+import 'widgets/chat_visible_message.dart';
 
 class ChatConversationScreen extends ConsumerStatefulWidget {
   const ChatConversationScreen({required this.roomId, super.key});
@@ -32,13 +36,20 @@ class ChatConversationScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatConversationScreenState
-    extends ConsumerState<ChatConversationScreen> {
+    extends ConsumerState<ChatConversationScreen>
+    with WidgetsBindingObserver, RouteAware {
   final _composer = TextEditingController();
   final _scroll = ScrollController();
+  var _appResumed = true;
+  var _routeCurrent = true;
+  var _visibilityGeneration = 0;
+  var _readTrigger = ChatReadTrigger.layout;
+  RouteObserver<ModalRoute<void>>? _routeObserver;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _composer.addListener(() => setState(() {}));
     _scroll.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -47,11 +58,55 @@ class _ChatConversationScreenState
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    _routeObserver?.unsubscribe(this);
+    _routeObserver = ref.read(chatRouteObserverProvider);
+    if (route is PageRoute) {
+      _routeObserver!.subscribe(this, route);
+    }
+    _routeCurrent = route?.isCurrent ?? false;
+  }
+
+  @override
   void dispose() {
+    _routeObserver?.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     _composer.dispose();
     super.dispose();
+  }
+
+  @override
+  void didPush() {
+    _routeCurrent = true;
+  }
+
+  @override
+  void didPop() {
+    _routeCurrent = false;
+  }
+
+  @override
+  void didPushNext() {
+    _routeCurrent = false;
+  }
+
+  @override
+  void didPopNext() {
+    _routeCurrent = true;
+    _scheduleReadPass(ChatReadTrigger.route);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final resumed = state == AppLifecycleState.resumed;
+    _appResumed = resumed;
+    if (resumed) {
+      _scheduleReadPass(ChatReadTrigger.resume);
+    }
   }
 
   void _onScroll() {
@@ -61,6 +116,16 @@ class _ChatConversationScreenState
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 64) {
       ref.read(chatRoomHistoryControllerProvider(widget.roomId).notifier).loadOlder();
     }
+  }
+
+  void _scheduleReadPass(ChatReadTrigger trigger) {
+    _readTrigger = trigger;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _visibilityGeneration++);
+    });
   }
 
   @override
@@ -73,6 +138,7 @@ class _ChatConversationScreenState
     final room = rooms.where((item) => item.id == roomId).firstOrNull;
     final historyAsync = ref.watch(chatRoomHistoryControllerProvider(roomId));
     final sendState = ref.watch(chatSendCoordinatorProvider);
+    ref.watch(chatReadCoordinatorProvider(roomId));
 
     ref.listen(chatSendCoordinatorProvider, (_, next) {
       if (userId == null) {
@@ -85,6 +151,12 @@ class _ChatConversationScreenState
               .read(chatRoomHistoryControllerProvider(roomId).notifier)
               .ingestConfirmed(confirmed);
         }
+      }
+    });
+
+    ref.listen(chatReadCoordinatorProvider(roomId), (previous, next) {
+      if (previous?.inFlight == true && !next.inFlight && _routeCurrent && _appResumed) {
+        _scheduleReadPass(ChatReadTrigger.layout);
       }
     });
 
@@ -103,9 +175,12 @@ class _ChatConversationScreenState
           if (!accessRevoked)
             IconButton(
               tooltip: 'Actualizar mensajes',
-              onPressed: () => ref
-                  .read(chatRoomHistoryControllerProvider(roomId).notifier)
-                  .refreshNewer(),
+              onPressed: () async {
+                await ref
+                    .read(chatRoomHistoryControllerProvider(roomId).notifier)
+                    .refreshNewer();
+                _scheduleReadPass(ChatReadTrigger.refresh);
+              },
               icon: const Icon(Icons.refresh),
             ),
         ],
@@ -222,18 +297,24 @@ class _ChatConversationScreenState
                 ),
               ),
             Expanded(
-              child: ListView.builder(
-                controller: _scroll,
-                reverse: true,
-                padding: const EdgeInsets.all(RvSpacing.md),
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final item = items[items.length - 1 - index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: RvSpacing.sm),
-                    child: _bubbleFor(item, userId),
-                  );
+              child: NotificationListener<ScrollEndNotification>(
+                onNotification: (_) {
+                  _scheduleReadPass(ChatReadTrigger.scroll);
+                  return false;
                 },
+                child: ListView.builder(
+                  controller: _scroll,
+                  reverse: true,
+                  padding: const EdgeInsets.all(RvSpacing.md),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[items.length - 1 - index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: RvSpacing.sm),
+                      child: _bubbleFor(item, userId),
+                    );
+                  },
+                ),
               ),
             ),
           ],
@@ -250,7 +331,7 @@ class _ChatConversationScreenState
         : message?.senderId == userId;
     final retryable =
         outgoing != null && isChatSendRetryable(outgoing) ? outgoing : null;
-    return ChatMessageBubble(
+    final bubble = ChatMessageBubble(
       message: message,
       outgoing: outgoing,
       isMine: isMine,
@@ -258,6 +339,35 @@ class _ChatConversationScreenState
           ? null
           : () => ref.read(chatSendCoordinatorProvider.notifier).retry(retryable.key),
     );
+    if (message == null || message.chatRoomId != widget.roomId) {
+      return bubble;
+    }
+    return ChatVisibleMessage(
+      message: message,
+      generation: _visibilityGeneration,
+      onPresented: _onMessagePresented,
+      child: bubble,
+    );
+  }
+
+  void _onMessagePresented(ChatMessage message) {
+    final auth = ref.read(authControllerProvider);
+    if (auth is! AuthAuthenticated) {
+      return;
+    }
+    if (!_appResumed || !_routeCurrent || !mounted) {
+      return;
+    }
+    ref.read(chatReadCoordinatorProvider(widget.roomId).notifier).consider(
+          ChatReadSighting(
+            roomId: widget.roomId,
+            userId: auth.user.id,
+            message: message,
+            appResumed: _appResumed,
+            routeCurrent: _routeCurrent,
+            trigger: _readTrigger,
+          ),
+        );
   }
 
   bool _isSending(ChatSendState sendState, int? userId) {
@@ -292,6 +402,7 @@ class _ChatConversationScreenState
       ref
           .read(chatRoomHistoryControllerProvider(widget.roomId).notifier)
           .ingestConfirmed(confirmed);
+      _scheduleReadPass(ChatReadTrigger.layout);
     }
   }
 }
