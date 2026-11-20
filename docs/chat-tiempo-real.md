@@ -20,7 +20,7 @@ Dentro de la transacción del servicio se llama a `ChatSyncEventDispatcher`, que
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | GET | `/chat/rooms` | Salas de juntas con membresía activa |
-| GET | `/chat/rooms/{room}/messages` | Historial incremental (`after_id`, `before_id`, `limit`) |
+| GET | `/chat/rooms/{room}/messages` | Historial paginado (`after_id` **o** `before_id`, `limit` 1–100, JSON ASC) |
 | POST | `/chat/rooms/{room}/messages` | Enviar mensaje (`body`, `client_message_id` UUID opcional). Throttle `chat-send`: 30/min por usuario autenticado (`red_vecinal.chat.send_per_user_per_minute`). `429` si se excede. |
 | GET | `/chat/rooms/{room}/unread-count` | No leídos (excluye propios y ocultos/eliminados) |
 | POST | `/chat/rooms/{room}/read` | Actualizar `chat_read_states` |
@@ -31,6 +31,24 @@ Dentro de la transacción del servicio se llama a `ChatSyncEventDispatcher`, que
 | POST | `/chat/messages/{message}/report` | Reportar mensaje |
 
 Autenticación de canales: `POST /broadcasting/auth` con middleware **`auth:sanctum`** (configurado en `bootstrap/app.php` → `withBroadcasting`).
+
+### Paginación de `GET /chat/rooms/{room}/messages`
+
+Respuesta: `{ "data": [ ...mensajes... ] }` en **orden ASC por `id`**. Solo se incluyen mensajes visibles para el usuario (visibles para todos los miembros; ocultos si el usuario puede administrar la junta; `deleted_by_sender` solo para el autor). Policy `view`, filtro de `chat_room_id` y `municipality_id`.
+
+| Parámetros | Contrato |
+|------------|----------|
+| Sin cursor | Últimos **N** mensajes visibles de la sala, reordenados ASC. |
+| `before_id` | Los **N** visibles **inmediatamente anteriores** a ese ID, reordenados ASC. |
+| `after_id` | Los **primeros N** visibles **posteriores** a ese ID, en ASC. |
+| `after_id` y `before_id` a la vez | **HTTP 422**. |
+| `limit` | Entero **1–100**, por defecto **30**. Fuera de rango → **422**. |
+
+Implementación: carga inicial y `before_id` usan `ORDER BY id DESC LIMIT N` y luego invierten el conjunto; `after_id` usa `ORDER BY id ASC LIMIT N`. No se aplica `ASC` antes del `LIMIT` en las ventanas hacia el pasado.
+
+Cliente Flutter (REST 5.5.3): la primera carga **sin cursor** representa el extremo reciente. `loadOlder()` envía `before_id` = mínimo ID cargado. `refreshNewer()` envía `after_id` = máximo ID cargado y **no borra** el historial si la página viene vacía. `hasOlder` es conservador: una página de tamaño `limit` sugiere que puede haber más antiguos (el API no expone `has_more`). `caughtUpNewer` arranca en `true` tras la carga inicial; no se interpreta una primera página llena como mensajes nuevos pendientes.
+
+Evento futuro **`chat.sync`**: el payload de Reverb no trae `body`. El cliente debe pedir contenido con `after_id` (equivalente a `refreshNewer()`), no rehacer la carga inicial sin cursor. El contrato de `after_id` no cambia.
 
 ## Junta suspendida / sala solo lectura
 

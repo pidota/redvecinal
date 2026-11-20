@@ -43,18 +43,19 @@ class ChatRoomController extends Controller
     {
         $this->authorize('view', $room);
         $request->validate([
-            'after_id' => ['nullable', 'integer', 'min:1'],
-            'before_id' => ['nullable', 'integer', 'min:1'],
+            'after_id' => ['nullable', 'integer', 'min:1', 'prohibits:before_id'],
+            'before_id' => ['nullable', 'integer', 'min:1', 'prohibits:after_id'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         $limit = (int) ($request->input('limit', 30));
         $user = $request->user();
+        $afterId = $request->filled('after_id') ? (int) $request->input('after_id') : null;
+        $beforeId = $request->filled('before_id') ? (int) $request->input('before_id') : null;
 
         $query = ChatMessage::query()
             ->where('chat_room_id', $room->id)
-            ->where('municipality_id', $room->municipality_id)
-            ->orderBy('id');
+            ->where('municipality_id', $room->municipality_id);
 
         $query->where(function ($builder) use ($user, $room) {
             $builder->where('status', ChatMessageStatus::Visible);
@@ -68,14 +69,25 @@ class ChatRoomController extends Controller
             });
         });
 
-        if ($request->filled('after_id')) {
-            $query->where('id', '>', (int) $request->input('after_id'));
+        if ($afterId !== null) {
+            $messages = $query->where('id', '>', $afterId)
+                ->orderBy('id')
+                ->limit($limit)
+                ->get();
+        } elseif ($beforeId !== null) {
+            $messages = $query->where('id', '<', $beforeId)
+                ->orderByDesc('id')
+                ->limit($limit)
+                ->get()
+                ->reverse()
+                ->values();
+        } else {
+            $messages = $query->orderByDesc('id')
+                ->limit($limit)
+                ->get()
+                ->reverse()
+                ->values();
         }
-        if ($request->filled('before_id')) {
-            $query->where('id', '<', (int) $request->input('before_id'));
-        }
-
-        $messages = $query->limit($limit)->get();
 
         return ChatMessageResource::collection($messages);
     }
