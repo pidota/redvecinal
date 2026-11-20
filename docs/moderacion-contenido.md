@@ -135,7 +135,7 @@ Cabecera opcional `Idempotency-Key`: UUID v4 (RFC 4122, versión 4, variante 8/9
 
 Autorización **antes** del lookup de replay: Sanctum, `view` (404) y `report` (403). La clave no salta visibilidad, publicación no `published` ni aislamiento municipal. El lookup es siempre `(reporter_id del token, clave validada)`; nunca solo por UUID.
 
-`reason_code` y `details` conservan las reglas previas (sin trim extra). El JSON de éxito no cambia: **201** `{ "id", "status" }` con `status` de creación (`open`). Un replay no expone el estado administrativo persistido.
+`reason_code` y `details` conservan las reglas previas (sin trim extra). El JSON de éxito no cambia: **201** `{ "id", "status": "open" }`. Ese `status` es el de **creación**, no el administrativo persistido: un replay exacto de un reporte ya `reviewing` o `resolved` sigue devolviendo `"open"` y el mismo `id`. Un replay no reabre ni expone `resolved_by` / `resolved_at` / `resolution_note`.
 
 | Caso | Código |
 |------|--------|
@@ -144,7 +144,7 @@ Autorización **antes** del lookup de replay: Sanctum, `view` (404) y `report` (
 | **403** | Con `view` pero sin `report` |
 | **422** | Cuerpo inválido, o cabecera presente e inválida |
 | **409** | Misma clave y usuario, huella o `post_id` distintos (sin mutar filas) |
-| **201** | Alta nueva o replay exacto `{id, status:"open"}` |
+| **201** | Alta nueva o replay exacto `{id, status:"open"}` (aunque la fila esté resuelta) |
 
 El cliente **no** puede fijar `reporter_id` ni `municipality_id` por el cuerpo JSON.
 
@@ -172,14 +172,24 @@ Identidad lógica: `(reporter_id, idempotency_key)`. La publicación y el conten
 
 #### Concurrencia
 
-La exclusión la da el UNIQUE, no un `SELECT … FOR UPDATE` sobre una clave ausente (ese patrón produjo deadlock 1213 en MySQL 8.4.13, run `44636447594`: A/E PASS; B/C/D FAIL; F incomplete). Hay tests SQLite de colisión UNIQUE, reintento 1213/1205, agotamiento y recuperación fuera de transacción. La carrera InnoDB a dos procesos (`PostReportIdempotencyMysqlConcurrencyTest` + worker + barrera) se omite en `php artisan test` (SQLite) y **no** forma parte de `phpunit.mysql.xml`. Se ejecuta con `phpunit.mysql.idempotency.xml` en `mysql-idempotency.yml` (`workflow_dispatch`), contra MySQL 8.4 efímero (`red_vecinal_testing`, `127.0.0.1`). **La corrección 5E.5E.2 no se ha vuelto a ejecutar en GitHub Actions; no se afirma que 8.4 pasó.** No ejecutar contra MariaDB de Laragon ni contra el VPS.
+La exclusión la da el UNIQUE `(reporter_id, idempotency_key)`, no un `SELECT … FOR UPDATE` sobre una clave ausente (ese patrón produjo deadlock 1213 en MySQL 8.4.13, run `44636447594`: A/E PASS; B/C/D FAIL; F incomplete). No existe unicidad global por usuario y publicación.
+
+Hay tests SQLite de colisión UNIQUE, reintento 1213/1205, agotamiento y recuperación fuera de transacción. La carrera InnoDB a dos procesos (`PostReportIdempotencyMysqlConcurrencyTest` + worker + barrera) se omite en `php artisan test` (SQLite) y **no** forma parte de `phpunit.mysql.xml` (Neighborhoods + Smoke).
+
+Se ejecuta con `phpunit.mysql.idempotency.xml` en `.github/workflows/mysql-idempotency.yml` (`workflow_dispatch`, no en cada push), contra MySQL 8.4 efímero (`red_vecinal_testing`, `127.0.0.1`).
+
+**Validación 8.4.13 (cierre 5E):** run GitHub Actions [`44649436250`](https://github.com/pidota/redvecinal/actions/runs/44649436250): **6 passed, 89 assertions**, escenarios A–F. Los workers no terminaron con 1213/1205. Eso demuestra integridad y disponibilidad en esa corrida; **no** afirma ausencia absoluta de deadlocks ni que el job MySQL de `backend-tests.yml` esté verde.
+
+No ejecutar contra MariaDB de Laragon ni contra el VPS. Un `workflow_dispatch` posterior es opcional (regresión), no un requisito para reconocer la evidencia A–F ya obtenida.
 
 #### Cliente Flutter (5E.4)
 
-La app genera una UUID v4 con `Random.secure` (sin paquete extra), en minúsculas, distinta por intento lógico. Se persiste **antes** del POST junto con `reason_code` y `details` en `rv_post_report_outcomes_v2` (Android/iOS: almacenamiento seguro). No hay replay automático al arrancar: el vecino usa **Comprobar envío**, que reenvía la misma URL, clave y payload. Esa acción **puede crear** el reporte si el primer POST nunca llegó; no afirma que solo consulta.
+La app genera una UUID v4 con `Random.secure` (sin paquete extra), en minúsculas, distinta por intento lógico. Se persiste **antes** del POST junto con `reason_code` y `details` en `rv_post_report_outcomes_v2` (Android/iOS: almacenamiento seguro). No hay replay automático al arrancar: el vecino usa **Comprobar envío**, que reenvía la misma URL, la **misma UUID** y el **mismo payload**. Esa acción **puede crear** el reporte si el primer POST nunca llegó; no afirma que solo consulta.
 
-Migración desde `rv_post_report_outcomes_v1`: `confirmed` sigue bloqueando; `uncertain`/`inFlight` sin UUID **no** se recuperan ni se convierten en un POST nuevo. v1 no se borra al escribir v2.
+Migración desde `rv_post_report_outcomes_v1`: `confirmed` sigue bloqueando reenvíos (con o sin payload residual); `uncertain`/`inFlight` sin UUID **no** se recuperan ni se convierten en un POST nuevo. v1 no se borra al escribir v2.
 
-Un 201 se confirma en disco **con** payload; solo después se borra `reason_code`/`details`/UUID (se puede conservar `reportId`). Si falla la persistencia del `confirmed`, el intento sigue `uncertain` y recuperable. Si el `confirmed` ya se escribió y falla solo la limpieza, el estado permanece `confirmed` y la hidratación posterior reintenta borrar el payload (sin POST ni UUID nueva). Un 409 deja el intento en `conflict`. Timeout, red, 5xx, 429, 422 genérico o 201 malformado conservan clave y payload. Un 422 de `reason_code`/`details` o de clave inválida reconocible **sí** libera el vuelo (el servidor no insertó). En **web** el almacén sigue en memoria: la recuperación vale hasta recargar.
+Un 201 se confirma en disco **con** payload; después se borra `reason_code`/`details`/UUID (se conserva `reportId`). El bloqueo de duplicados depende del estado `confirmed`, no de conservar la UUID. Si falla la persistencia del `confirmed`, el intento sigue `uncertain` y recuperable. Si el `confirmed` ya se escribió y falla solo la limpieza, el estado permanece `confirmed` y la hidratación posterior reintenta borrar el payload **solo si esa escritura tiene éxito** (sin POST ni UUID nueva). Un 409 deja el intento en `conflict`. Timeout, red, 5xx, 429, 422 genérico o 201 malformado conservan clave y payload. Un 422 de `reason_code`/`details` o de clave inválida reconocible **sí** libera el vuelo (el servidor no insertó). En **web** el almacén sigue en memoria: se pierde al recargar. Otro dispositivo, o borrar los datos de la app, no comparte estas marcas. El almacenamiento seguro reduce el acceso casual; no impide todo acceso al dispositivo.
 
-Un nuevo `workflow_dispatch` de `.github/workflows/mysql-idempotency.yml` es necesario para validar la corrección transaccional en MySQL 8.4; hasta entonces la concurrencia real **no** se considera aprobada.
+#### CI habitual (independiente de 5E)
+
+El job MySQL de `backend-tests.yml` (`phpunit.mysql.xml`, Neighborhoods + Smoke) **no** es la suite de idempotencia. En el commit `6ac367c` ese job falló: `MobileMembershipRequestTest::test_municipal_admin_can_approve_in_scope`, MySQL **1062** `users.users_email_unique`. Es una colisión de `UserFactory` en el módulo Neighborhoods. No se declara ese job verde. No se afirma que la causa de la colisión Faker esté corregida. Flutter CI y SQLite del mismo SHA sí pasaron; la suite A–F es `mysql-idempotency.yml`, no ese job.

@@ -296,7 +296,7 @@ Flujo para **vecinos autenticados** que reportan una publicación comunitaria pu
 2. El formulario ofrece motivos **locales** `spam` e `inappropriate` (catálogo provisional de la app; no es un enum municipal ni un catálogo oficial del backend).
 3. El campo **Detalles** es opcional (máx. 2000 caracteres; no se trunca en silencio).
 4. **Enviar reporte** abre una confirmación explícita. El POST **no** se ejecuta al validar, navegar ni reconstruir widgets.
-5. Tras confirmar, un único `POST` con cabecera `Idempotency-Key` (UUID v4 persistida antes del envío). Si el servidor responde **HTTP 201** con `{ id, status }`, la app muestra «Reporte recibido» y no exhibe el identificador interno.
+5. Tras confirmar, un único `POST` con cabecera `Idempotency-Key` (UUID v4 persistida antes del envío). Si el servidor responde **HTTP 201** con `{ id, status: "open" }`, la app muestra «Reporte recibido» y no exhibe el identificador interno. Ese `status` es siempre `"open"` (incluso en replay de un reporte ya resuelto en Filament); la app confirma por el **201** y el `id`, no por el estado administrativo.
 
 ### Contrato
 
@@ -322,11 +322,15 @@ Response (201):
 }
 ```
 
+El JSON **siempre** lleva `"status": "open"`: alta nueva o replay exacto, aunque el reporte esté `reviewing` o `resolved` en el panel. El `id` es el mismo en un replay exacto.
+
+El backend identifica el intento por `(reporter_id del token, Idempotency-Key)`. **No** hay `UNIQUE(reporter_id, post_id)`.
+
 ### Seguridad
 
 - Autenticación **Sanctum**; el backend (PostPolicy) es la autoridad de quién puede reportar.
 - Un POST por intento: sin reintentos automáticos en Dio, repositorio ni controlador.
-- Exclusión compartida por **usuario autenticado + publicación** (coordinador, no un booleano del widget).
+- Exclusión **local** del coordinador: un intento a la vez por **usuario autenticado + publicación**. En el servidor la idempotencia es `(reporter_id, idempotency_key)`, no una unicidad global usuario+publicación.
 - Protección de sesión (`neighborhoodSessionEpoch`): un resultado tardío no se muestra como éxito en otra sesión.
 - La marca `inFlight` se persiste **antes** de despachar el POST. Si esa escritura falla, **no** se envía.
 - Si el almacenamiento local no puede interpretarse de forma fiable (JSON corrupto o un registro ilegible), se bloquean nuevos POST. No se ignoran registros malformados ni se convierte la corrupción en lista vacía.
@@ -336,7 +340,7 @@ Response (201):
 Tras despachar el POST, timeout, error de red, HTTP 5xx o un 201 malformado **no** demuestran que el servidor haya rechazado la creación. La app:
 
 - registra estado local **uncertain** con la UUID y el payload originales;
-- muestra **Comprobar envío** (replay explícito, misma clave y mismo contenido; el servidor puede crear el reporte si el primero nunca llegó);
+- muestra **Comprobar envío** (replay explícito: **misma UUID** y **mismo payload**; el servidor puede crear el reporte si el primero nunca llegó);
 - **no** reintenta al arrancar ni desde Dio;
 - **no** reconcilia con un GET ficticio.
 
@@ -344,7 +348,7 @@ Los registros **v1** inciertos (sin UUID) siguen bloqueados y no se recuperan. 4
 
 ### Persistencia local
 
-Almacén `rv_post_report_outcomes_v2` (schema 2). Antes del POST: `userId`, `postId`, UUID, `reason_code`, `details`, estado, `generation`, `recordedAt`. El 201 se persiste como `confirmed` **con** payload; después se borran UUID/`reason_code`/`details` (se conserva `reportId`). Si esa limpieza falla, el estado sigue `confirmed` (bloquea duplicados) y la hidratación posterior reintenta el borrado. El almacenamiento seguro reduce el acceso casual; no impide todo acceso al dispositivo. Sin token ni body HTTP completo.
+Almacén `rv_post_report_outcomes_v2` (schema 2). Antes del POST: `userId`, `postId`, UUID, `reason_code`, `details`, estado, `generation`, `recordedAt`. El 201 se persiste como `confirmed` **con** payload; después se borran UUID/`reason_code`/`details` (se conserva `reportId`). Un `confirmed` **sigue bloqueando** reenvíos aunque el payload ya se haya limpiado. Si la limpieza falla, el estado permanece `confirmed` y la hidratación posterior reintenta el borrado **solo si esa escritura tiene éxito**. El almacenamiento seguro reduce el acceso casual; no impide todo acceso al dispositivo. Sin token ni body HTTP completo.
 
 Migración: si no hay v2 se lee `rv_post_report_outcomes_v1`. `confirmed` se conserva. `uncertain`/`inFlight` sin clave **no** reciben UUID inventada. v1 no se elimina.
 
@@ -353,7 +357,8 @@ En **web** el almacén es en memoria (se pierde al recargar; la recuperación va
 ### Limitaciones
 
 - El backend es idempotente **solo** con `Idempotency-Key`. Sin cabecera, cada POST crea un reporte. No hay `UNIQUE(reporter_id, post_id)`.
-- Otro dispositivo, o borrar los datos de la aplicación, elimina las marcas locales.
+- Otro dispositivo, o borrar los datos de la aplicación, elimina las marcas locales y puede crear otro reporte.
+- En **web** el almacén es memoria de esa recarga.
 - No hay endpoint para consultar si el vecino ya reportó.
 - Filament gestiona reportes en 5D; el catálogo de motivos de la app es provisional y local.
 
@@ -365,7 +370,8 @@ En **web** el almacén es en memoria (se pierde al recargar; la recuperación va
 | RPT-5C5-R1 | Si falla persistir `inFlight` **antes** del POST, no se envía. |
 | RPT-WEB | En web no hay persistencia entre recargas. |
 | RPT-LEGACY | Intentos inciertos v1 no se pueden comprobar. |
-| RPT-MYSQL | La carrera InnoDB a dos procesos **no** se ha ejecutado en CI. |
+| RPT-MYSQL | Concurrencia InnoDB A–F validada en CI `mysql-idempotency.yml`, run `44649436250` (MySQL 8.4.13, 6 passed / 89 assertions). Es `workflow_dispatch`, no cada push. No afirma ausencia absoluta de deadlocks. |
+| RPT-NEIGH-CI | El job MySQL de `backend-tests.yml` en `6ac367c` falló por `MobileMembershipRequestTest::test_municipal_admin_can_approve_in_scope` (1062 `users.users_email_unique`). Es Neighborhoods/`UserFactory`, no la suite de reportes. Ese job **no** se declara verde. |
 
 ## Subfases pendientes
 
