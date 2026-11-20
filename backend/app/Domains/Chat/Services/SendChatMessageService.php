@@ -4,6 +4,7 @@ namespace App\Domains\Chat\Services;
 
 use App\Domains\Chat\Enums\ChatMessageStatus;
 use App\Domains\Chat\Enums\ChatSyncEventType;
+use App\Domains\Chat\Exceptions\ChatDomainException;
 use App\Domains\Chat\Models\ChatMessage;
 use App\Domains\Chat\Models\ChatRoom;
 use App\Domains\Chat\Support\ChatMembershipGuard;
@@ -28,11 +29,11 @@ class SendChatMessageService
         $body = trim($body);
         $maxLength = (int) config('red_vecinal.chat.max_message_length', 4000);
         if ($body === '' || mb_strlen($body) > $maxLength) {
-            throw new \InvalidArgumentException('Mensaje inválido.');
+            throw new ChatDomainException('Mensaje inválido.');
         }
 
         if ($clientMessageId !== null && ! Str::isUuid($clientMessageId)) {
-            throw new \InvalidArgumentException('client_message_id inválido.');
+            throw new ChatDomainException('client_message_id inválido.');
         }
 
         return DB::transaction(function () use ($room, $sender, $body, $clientMessageId) {

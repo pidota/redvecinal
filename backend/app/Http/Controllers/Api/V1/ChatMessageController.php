@@ -16,9 +16,13 @@ class ChatMessageController extends Controller
 {
     public function update(Request $request, ChatMessage $message, EditChatMessageService $edit): ChatMessageResource
     {
-        $this->authorize('view', $message);
+        $this->authorize('update', $message);
+        $maxLength = (int) config('red_vecinal.chat.max_message_length', 4000);
+        $request->merge([
+            'body' => trim((string) $request->input('body', '')),
+        ]);
         $data = $request->validate([
-            'body' => ['required', 'string'],
+            'body' => ['required', 'string', 'max:'.$maxLength],
         ]);
 
         return new ChatMessageResource($edit->execute($message, $request->user(), $data['body']));
@@ -26,14 +30,14 @@ class ChatMessageController extends Controller
 
     public function destroy(Request $request, ChatMessage $message, DeleteChatMessageService $delete): ChatMessageResource
     {
-        $this->authorize('view', $message);
+        $this->authorize('delete', $message);
 
         return new ChatMessageResource($delete->execute($message, $request->user()));
     }
 
     public function hide(Request $request, ChatMessage $message, HideChatMessageService $hide): ChatMessageResource
     {
-        $this->authorize('view', $message);
+        $this->authorize('hide', $message);
         $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
 
         return new ChatMessageResource($hide->execute($message, $request->user(), $data['reason'] ?? null));
@@ -41,7 +45,7 @@ class ChatMessageController extends Controller
 
     public function report(Request $request, ChatMessage $message, ReportChatMessageService $report): JsonResponse
     {
-        $this->authorize('view', $message);
+        $this->authorize('report', $message);
         $data = $request->validate([
             'reason_code' => ['required', 'string', 'max:60'],
             'details' => ['nullable', 'string', 'max:2000'],

@@ -50,6 +50,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perHour($perUser)->by('membership-requests|'.$request->user()?->id.'|'.$request->ip());
         });
 
+        RateLimiter::for('chat-send', function (Request $request) {
+            $perMinute = (int) config('red_vecinal.chat.send_per_user_per_minute', 30);
+
+            return Limit::perMinute($perMinute)->by('chat-send|'.$request->user()?->id);
+        });
+
         RateLimiter::for('mobile-login', function (Request $request): array {
             $perIdentity = config('red_vecinal.mobile_auth.login_attempts_per_identity_per_minute', 5);
             $perIp = config('red_vecinal.mobile_auth.login_attempts_per_ip_per_minute', 30);

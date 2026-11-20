@@ -31,7 +31,9 @@ Ejemplo de payload broadcast (`ChatRoomSyncBroadcast::broadcastWith()`):
 
 - Autorizar el canal en el handshake **no revoca** conexiones WebSocket ya abiertas si luego se suspende al vecino o la junta.
 - Cada **reconexión** vuelve a llamar a `/broadcasting/auth` y revalida membresía.
-- **No** hay desconexión forzada del servidor implementada ni probada en esta fase; no asumir revocación en tiempo real.
+- REST y nuevas autorizaciones de canal **sí rechazan** al usuario revocado (membresía activa).
+- Un socket previamente autorizado **puede seguir recibiendo** señales `chat.sync` (sin `body`) después de perder la membresía.
+- **No** hay desconexión forzada del servidor en 5.5.2; el problema **no está resuelto**. Pendiente para **5.5.6** (contrato de cliente) y **5.5.8** (cierre de canal / hardening WS).
 
 ## Moderación y privacidad municipal
 
@@ -47,4 +49,12 @@ FK compuestas y únicos en migraciones `2026_11_10_300000`–`300004` (sala↔ju
 
 - `tests/Feature/Chat/ChatBroadcastTest.php` — payload sin contenido sensible.
 - `tests/Feature/Chat/ChatChannelAuthorizationTest.php` — misma lógica que `channels.php` (driver `null` en CI).
+- `tests/Feature/Chat/ChatHttpContractTest.php` — validación 422, abilities de mutación, throttle de envío, aislamiento.
 - Aislamiento entre juntas/municipios cubierto en tests de mensajería y policies.
+
+## Rate limit de envío (5.5.2)
+
+- Middleware `throttle:chat-send` solo en `POST /api/v1/chat/rooms/{room}/messages`.
+- Clave por usuario autenticado (`chat-send|{userId}`); lecturas, edición, borrado, hide y reportes **no** comparten este cupo.
+- Tope inicial MVP: **30 mensajes/minuto** (`red_vecinal.chat.send_per_user_per_minute`), alineado en orden de magnitud con `mobile_auth.login_attempts_per_ip_per_minute` (30/min) y más estricto que un chat libre.
+- Respuesta `429` sin crear fila. Los reintentos idempotentes **no** eluden el límite.

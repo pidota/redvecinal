@@ -21,7 +21,7 @@ Dentro de la transacción del servicio se llama a `ChatSyncEventDispatcher`, que
 |--------|------|-------------|
 | GET | `/chat/rooms` | Salas de juntas con membresía activa |
 | GET | `/chat/rooms/{room}/messages` | Historial incremental (`after_id`, `before_id`, `limit`) |
-| POST | `/chat/rooms/{room}/messages` | Enviar mensaje (`body`, `client_message_id` UUID opcional) |
+| POST | `/chat/rooms/{room}/messages` | Enviar mensaje (`body`, `client_message_id` UUID opcional). Throttle `chat-send`: 30/min por usuario autenticado (`red_vecinal.chat.send_per_user_per_minute`). `429` si se excede. |
 | GET | `/chat/rooms/{room}/unread-count` | No leídos (excluye propios y ocultos/eliminados) |
 | POST | `/chat/rooms/{room}/read` | Actualizar `chat_read_states` |
 | GET | `/chat/messages/{message}` | Detalle (membresía + policy) |
@@ -34,11 +34,13 @@ Autenticación de canales: `POST /broadcasting/auth` con middleware **`auth:sanc
 
 ## Junta suspendida / sala solo lectura
 
-Si la junta no está activa, la sala permanece en historial **solo lectura** para miembros con acceso de lectura: GET, marcadores de lectura y **suscripción al canal** siguen permitidos para miembros activos; envío, edición y borrado devuelven 422.
+Si la junta no está activa, la sala permanece en historial **solo lectura** para miembros con acceso de lectura: GET, marcadores de lectura y **suscripción al canal** siguen permitidos para miembros activos. El envío devuelve **422** (`ChatMembershipGuard::assertCanWriteRoom`). Edición y borrado devuelven **403** (`ChatMessagePolicy::update` / `delete` exigen sala escribible).
 
 ## Idempotencia
 
-`client_message_id` + `sender_id` + `chat_room_id` es único en base de datos. Reintentos devuelven el mismo mensaje **sin** volver a encolar broadcasting.
+`client_message_id` + `sender_id` + `chat_room_id` es único en base de datos. Reintentos devuelven el mismo mensaje **sin** volver a encolar broadcasting. El replay **sí consume** el throttle de envío: un reintento inmediato tras agotar el cupo responde `429` y no crea un mensaje nuevo.
+
+Validación HTTP de envío y edición: `body` obligatorio (tras `trim`), máximo `max_message_length` (4000); `client_message_id` UUID o nulo. Entrada inválida → **422**, no 500.
 
 ## Comandos
 
@@ -93,5 +95,5 @@ Herramienta temporal en `backend/scripts/dev/reverb-e2e/` (`README.md`): `pusher
 
 ## Configuración
 
-`config/red_vecinal.php` → clave `chat` (`max_message_length`, `edit_window_minutes`).
+`config/red_vecinal.php` → clave `chat` (`max_message_length`, `edit_window_minutes`, `send_per_user_per_minute`).
 `config/reverb.php` → servidor local (producción: variables en servidor, fuera del repo).

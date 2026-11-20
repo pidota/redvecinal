@@ -39,7 +39,7 @@ class EditChatMessageService
         $body = trim($body);
         $maxLength = (int) config('red_vecinal.chat.max_message_length', 4000);
         if ($body === '' || mb_strlen($body) > $maxLength) {
-            throw new \InvalidArgumentException('Mensaje inválido.');
+            throw new ChatDomainException('Mensaje inválido.');
         }
 
         return DB::transaction(function () use ($message, $editor, $body) {

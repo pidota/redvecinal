@@ -5,8 +5,8 @@ use App\Http\Controllers\Api\V1\ChatMessageController;
 use App\Http\Controllers\Api\V1\ChatRoomController;
 use App\Http\Controllers\Api\V1\MembershipRequestController;
 use App\Http\Controllers\Api\V1\NeighborhoodGroupController;
-use App\Http\Controllers\Api\V1\PostCategoryController;
 use App\Http\Controllers\Api\V1\PostAttachmentController;
+use App\Http\Controllers\Api\V1\PostCategoryController;
 use App\Http\Controllers\Api\V1\PostCommentController;
 use App\Http\Controllers\Api\V1\PostController;
 use App\Http\Controllers\Api\V1\PostReactionController;
@@ -69,7 +69,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/chat/rooms', [ChatRoomController::class, 'index']);
     Route::get('/chat/rooms/{room}/messages', [ChatRoomController::class, 'messages']);
-    Route::post('/chat/rooms/{room}/messages', [ChatRoomController::class, 'storeMessage']);
+    Route::post('/chat/rooms/{room}/messages', [ChatRoomController::class, 'storeMessage'])
+        ->middleware('throttle:chat-send');
     Route::get('/chat/rooms/{room}/unread-count', [ChatRoomController::class, 'unreadCount']);
     Route::post('/chat/rooms/{room}/read', [ChatRoomController::class, 'markRead']);
 

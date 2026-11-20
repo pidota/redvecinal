@@ -82,11 +82,9 @@ class ChatRoomController extends Controller
 
     public function storeMessage(Request $request, ChatRoom $room, SendChatMessageService $send): JsonResponse
     {
+        // view: 403 entre juntas. La escritura (sala bloqueada) sigue en el servicio → 422.
         $this->authorize('view', $room);
-        $data = $request->validate([
-            'body' => ['required', 'string'],
-            'client_message_id' => ['nullable', 'uuid'],
-        ]);
+        $data = $this->validatedMessagePayload($request);
 
         $message = $send->execute(
             $room,
@@ -119,6 +117,22 @@ class ChatRoomController extends Controller
         return response()->json([
             'last_read_message_id' => $state->last_read_message_id,
             'last_read_at' => $state->last_read_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * @return array{body: string, client_message_id?: string}
+     */
+    private function validatedMessagePayload(Request $request): array
+    {
+        $maxLength = (int) config('red_vecinal.chat.max_message_length', 4000);
+        $request->merge([
+            'body' => trim((string) $request->input('body', '')),
+        ]);
+
+        return $request->validate([
+            'body' => ['required', 'string', 'max:'.$maxLength],
+            'client_message_id' => ['nullable', 'uuid'],
         ]);
     }
 }

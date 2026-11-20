@@ -24,6 +24,8 @@ return [
     'chat' => [
         'max_message_length' => 4000,
         'edit_window_minutes' => 15,
+        // Envío por usuario autenticado. Replays idempotentes también consumen el cupo.
+        'send_per_user_per_minute' => 30,
     ],
 
     /*
